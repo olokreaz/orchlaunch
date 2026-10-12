@@ -1,5 +1,9 @@
 # OrchLaunch
 
+> [!NOTE]
+> This plugin was built with **AI** — pure ✨ **vibe coding** ✨ energy, no plan,
+> no spec, just good vibes and `:wq`. Use at your own vibe.
+
 A CLion-style **Run/Debug configuration** system for Neovim: named run
 configurations, toolchains, external tools, CMake profiles/presets and CMake
 target discovery — driven from TOML files inside a `.orch` project.
