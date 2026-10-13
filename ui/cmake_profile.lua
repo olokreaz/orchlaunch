@@ -287,7 +287,7 @@ function M.open(existing, on_saved, opts)
 
             local value_width = vim.api.nvim_strwidth(value)
             local fill = math.max(1, inner - left_width - value_width - 2)
-            local leader = string.rep("·", fill)
+            local leader = string.rep(" ", fill)
             lines[index] = left .. leader .. " " .. value .. " "
 
             local left_bytes = #left
@@ -295,8 +295,6 @@ function M.open(existing, on_saved, opts)
             spans[index] = {
                 label_start = 2,
                 label_end = 2 + #field.label,
-                leader_start = left_bytes,
-                leader_end = left_bytes + leader_bytes,
                 value_start = left_bytes + leader_bytes + 1,
                 value_end = left_bytes + leader_bytes + 1 + #value,
                 placeholder = placeholder,
@@ -312,7 +310,6 @@ function M.open(existing, on_saved, opts)
         for index = 1, #fields do
             local span = spans[index]
             vim.api.nvim_buf_add_highlight(popup.bufnr, NS, "OrchLaunchLabel", index - 1, span.label_start, span.label_end)
-            vim.api.nvim_buf_add_highlight(popup.bufnr, NS, "OrchLaunchHint", index - 1, span.leader_start, span.leader_end)
             vim.api.nvim_buf_add_highlight(
                 popup.bufnr,
                 NS,
