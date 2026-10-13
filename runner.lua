@@ -1,8 +1,8 @@
 -- OrchLaunch — Run/Debug dispatch.
 --
 -- Turns a run configuration into one or more processes. Build and install
--- before-launch actions are executed through CMake; debugger (DAP) support is
--- not implemented yet and reports a clear message instead of failing silently.
+-- before-launch actions are executed through CMake; debugger (DAP) support
+-- integrates with nvim-dap via the debug overlay.
 
 local cmake = require("orchlaunch.cmake")
 local process = require("orchlaunch.process")

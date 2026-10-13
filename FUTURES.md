@@ -30,7 +30,7 @@
 - [x] Before-launch: `build`, `install`, `external(tool)` в порядке; ошибка прерывает цепочку
 - [x] Console modes: `embedded` (терминал), `hidden` (асинхронный notify по завершению), `none` (тихое завершение)
 - [x] Compound: последовательный запуск дочерних конфигураций
-- [x] Remote-debug: маршрутизация (только debug-режим), заглушки DAP (сообщение «not implemented yet»)
+- [x] Remote-debug: маршрутизация (только debug-режим), интеграция с nvim-dap через debug overlay
 - [x] External tools: синхронный запуск через `vim.system`, sudo поддержка
 
 ## UI (nui-components)
@@ -53,7 +53,7 @@
 - [x] E2E: `e2e_cmake_test.lua` (presets → configure → targets → build → run → ctest → install), `e2e_runner_test.lua` (все пути запуска + before-launch), `e2e_ui_test.lua` (формы/диалоги), `config_serialization_test.lua` (edge-cases)
 
 ## Не реализовано (планы)
-- [ ] DAP-интеграция для native/remote-debug (реальный attach/launch)
+- [x] DAP-интеграция для native/remote-debug (реальный attach/launch)
 - [ ] Compound: stop-on-failure / continue-on-error, таймауты, параллельный запуск
 - [ ] Console: режимы `hidden/none` — более детальная телеметрия, захват вывода в буфер/log
 - [ ] UI: автотесты на фокус/solo-редакторы, edge-cases пустых списков (уже частично есть)

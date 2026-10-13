@@ -43,8 +43,7 @@ target discovery — driven from TOML files inside a `.orch` project.
   manager, backed by plain TOML on disk.
 - **Active configuration** — remembered per project (outside `.orch`).
 
-> Debugging (DAP) is not implemented yet; Debug reports a clear message instead
-> of failing silently.
+> Debugging (DAP) integrates with nvim-dap (launch for native, attach for remote-debug). If nvim-dap is not installed, OrchLaunch will notify accordingly.
 
 ## Requirements
 
