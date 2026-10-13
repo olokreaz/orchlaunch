@@ -76,10 +76,10 @@ attempt("editor external tool", function()
 end)
 
 attempt("editor cmake", function()
-    local renderer = require("orchlaunch.ui.editor").open_cmake()
+    local r = require("orchlaunch.ui.editor").open_cmake()
     vim.wait(200)
-    assert(renderer and renderer:get_component_by_id("name"), "cmake editor did not render")
-    renderer:close()
+    assert(r ~= nil and r.orch ~= nil, "editor did not render")
+    r.orch.close(false)
 end)
 
 attempt("list_dialog toolchains", function()

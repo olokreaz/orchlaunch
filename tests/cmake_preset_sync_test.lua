@@ -84,40 +84,41 @@ eq(state.cmake_profile("debug").kind, "configure", "kind persisted")
 eq(state.cmake_profile("debug").enabled, true, "enabled persisted")
 eq(state.cmake_profile("debug-build").enabled, false, "disabled persisted")
 
--- Preset profile editor only exposes env
-local editor = require("orchlaunch.ui.editor")
-local saved = false
-local renderer = editor.open_cmake(state.cmake_profile("debug"), function()
-    saved = true
-end)
-vim.wait(300)
-eq(renderer:get_component_by_id("preset_header") ~= nil, true, "preset editor header")
-eq(renderer:get_component_by_id("toolchain") == nil, true, "preset profile hides toolchain")
-eq(renderer:get_component_by_id("environment") ~= nil, true, "preset profile exposes environment")
-
-renderer:get_component_by_id("environment"):set_current_value("MY_VAR=42")
-local pressed = false
-for _, component in ipairs(renderer:get_focusable_components()) do
-    local props = component:get_props()
-    if type(props.on_press) == "function"
-        and type(props.lines) == "string"
-        and props.lines:find("Save", 1, true)
-    then
-        props.on_press(component)
-        pressed = true
-        break
-    end
+-- Preset-derived profiles are read-only: they are imported from the preset
+-- JSON files and cannot be edited (or created) through the editor.
+local notifications = {}
+vim.notify = function(msg)
+    notifications[#notifications + 1] = tostring(msg)
 end
-eq(pressed, true, "preset profile Save pressed")
-eq(saved, true, "preset profile saved")
-local updated = state.cmake_profile("debug")
-eq(updated.environment.MY_VAR, "42", "environment override stored")
-eq(updated.configure_preset, "debug", "configure preset preserved")
-eq(updated.kind, "configure", "kind preserved")
+
+local editor = require("orchlaunch.ui.editor")
+local closed = false
+local popup = editor.open_cmake(state.cmake_profile("debug"), function()
+    closed = true
+end)
+vim.wait(200)
+
+eq(popup ~= nil and popup.orch ~= nil, true, "preset editor renders")
+eq(popup.orch.readonly, true, "preset profile is read-only")
+
+local fields = {}
+for _, field in ipairs(popup.orch.fields or {}) do
+    fields[field.id] = true
+end
+
+eq(fields.kind, true, "preset profile shows source")
+eq(fields.configure_preset, true, "preset profile shows configure preset")
+eq(fields.toolchain, nil, "preset profile hides toolchain")
+
+local count = #notifications
+popup.orch.save()
+eq(#notifications > count, true, "preset profile save rejected")
+
+popup.orch.close(false)
+eq(closed, true, "preset profile close callback fired")
 
 state.reload()
 local reloaded = state.cmake_profile("debug")
-eq(reloaded.environment.MY_VAR, "42", "environment survives reload")
 eq(reloaded.kind, "configure", "kind survives reload")
 eq(reloaded.configure_preset, "debug", "configure preset survives reload")
 

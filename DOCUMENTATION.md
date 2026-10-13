@@ -99,10 +99,18 @@ disambiguated (`<name> (build)`) only on collision. Importing again adds nothing
 The profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`), **Edit**
 (`e`), **Delete** (`D`), **Toggle** (`t`, enable/disable), **Set active** (`A`),
 **Import** (`i`) and **Project** (`p`, edit the CMake project directory).
-Choosing **Set active** enables the profile. Editing opens a Lua scratch
-buffer: manual profiles expose every field; preset-derived profiles show the
-resolved preset values as comments and expose only `name`, `enabled` and
-`environment`. Write with `:w` / `<C-s>`, close with `q` / `<Esc>`.
+Choosing **Set active** enables the profile.
+
+The editor is a `nui.nvim` field list. Move with `j`/`k` (or arrows), press
+`<CR>` to edit the focused field (text prompt, option menu or multi-line
+editor), `<Space>` to toggle booleans, `<C-s>` to save and `q`/`<Esc>` to close.
+Manual profiles expose every field (name, enabled, toolchain, generator, build
+type, directories, the five preset selections, args, definitions, environment).
+
+Preset-derived profiles are **read-only**: they are imported from
+`CMakePresets.json` / `CMakeUserPresets.json` (and their includes) and cannot be
+created or edited here — only viewed. Change the preset file and re-import
+instead. A new profile is always a manual one.
 
 The active profile's configure preset's `binaryDir` (after macro expansion)
 becomes the build directory; otherwise the profile's `build_dir` applies,
@@ -320,8 +328,8 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 
 ### UI (nui.nvim + nui-components)
 - Browser: list of configurations with active marker, actions (Run/Debug/Edit/Delete/New, Load CMake, Open CMake Profiles/Toolchains/External Tools). Keys: `r`, `d`, `e`, `D`, `A` (set active), `n`, `m` (Load CMake), `C` (CMake profiles), `T` (toolchains), `X` (external tools), `R` (reload).
-- Editors per type: native/remote/compound/toolchain/external tool/CMake profiles. Forms built with nui-components.
-- Scratch buffer Lua editor for CMake profiles (preset-derived and manual): `buftype="acwrite"`, name `orchlaunch://<hrtime>`, `:w`/`<C-s>` save, `q`/`<Esc>` close. Preset profiles expose only `name`, `enabled`, `environment` (others shown as read-only comments). Manual profiles expose full fields.
+- Editors per type: native/remote/compound/toolchain/external tool/CMake project. Forms built with nui-components.
+- CMake profile editor (`ui/cmake_profile.lua`) is a raw `nui.nvim` popup field list: `j`/`k` move, `<CR>` edits (prompt/menu/multi-line), `<Space>` toggles, `<C-s>` saves, `q`/`<Esc>` closes. Manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand).
 - List dialogs: generic reusable list with Details pane, actions (New/Edit/Delete/Toggle/Set Active/Import/Project), keyboard mappings (`a,e,D,t,A,i,p`), autofocus for key handling.
 - Project-wide CMake project editor accessible via `p` in CMake profiles manager or `:OrchLaunchCMakeProject`.
 

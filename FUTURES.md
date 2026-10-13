@@ -36,7 +36,8 @@
 ## UI (nui-components)
 - [x] Общие хелперы (`UI.*`), рендерер с клавиатурой
 - [x] Браузер конфигураций (Run/Debug): список, детали, действия r/d/e/a/y/D/A/m, переходы в диалоги
-- [x] Редакторы: native/remote-debug/compound, toolchain, external tool, CMake profile (scratch-buffer), CMake project
+- [x] Редакторы: native/remote-debug/compound, toolchain, external tool, CMake project
+- [x] Редактор CMake-профиля на сыром `nui.nvim` (field-list, read-only preset-профили)
 - [x] Target-picker (select CMake targets + свободный путь)
 - [x] Списочные диалоги: Toolchains, External Tools, CMake Profiles (с импортом пресетов, toggle, set active, project)
 - [x] Theme hooks
