@@ -104,8 +104,9 @@ Choosing **Set active** enables the profile.
 The editor is a `nui.nvim` field list. Move with `j`/`k` (or arrows), press
 `<CR>` to edit the focused field (text prompt, option menu or multi-line
 editor), `<Space>` to toggle booleans, `<C-s>` to save and `q`/`<Esc>` to close.
-Labels and values are colour-highlighted and the border title tracks the profile
-name.
+Labels and values are colour-highlighted; each row is laid out `label ····· value`
+with the value right-aligned to the window edge, and the border title tracks the
+profile name.
 
 Manual profiles expose every field — name, enabled, toolchain, generator, build
 type, directories, args, definitions and environment — and never reference

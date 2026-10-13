@@ -268,18 +268,39 @@ function M.open(existing, on_saved, opts)
     end
 
     local function render()
-        local label_width = 0
-        for _, field in ipairs(fields) do
-            label_width = math.max(label_width, vim.api.nvim_strwidth(field.label))
-        end
-
-        local value_start = 2 + label_width + 3
+        -- Inner width of the popup (borders sit outside the window).
+        local inner = width
+        local spans = {}
         local lines = {}
 
         for index, field in ipairs(fields) do
-            local label = field.label .. string.rep(" ", label_width - vim.api.nvim_strwidth(field.label))
-            local value = format_value(field, values)
-            lines[index] = ("  %s   %s"):format(label, value)
+            local raw, placeholder = format_value(field, values)
+            local value = raw
+
+            -- "  Label ······················ value "
+            local left = "  " .. field.label
+            local left_width = vim.api.nvim_strwidth(left)
+            local max_value = inner - left_width - 3
+            if vim.api.nvim_strwidth(value) > max_value and max_value >= 1 then
+                value = vim.fn.strcharpart(value, 0, math.max(1, max_value - 1)) .. "…"
+            end
+
+            local value_width = vim.api.nvim_strwidth(value)
+            local fill = math.max(1, inner - left_width - value_width - 2)
+            local leader = string.rep("·", fill)
+            lines[index] = left .. leader .. " " .. value .. " "
+
+            local left_bytes = #left
+            local leader_bytes = #leader
+            spans[index] = {
+                label_start = 2,
+                label_end = 2 + #field.label,
+                leader_start = left_bytes,
+                leader_end = left_bytes + leader_bytes,
+                value_start = left_bytes + leader_bytes + 1,
+                value_end = left_bytes + leader_bytes + 1 + #value,
+                placeholder = placeholder,
+            }
         end
 
         selected = math.max(1, math.min(selected, #fields))
@@ -288,16 +309,17 @@ function M.open(existing, on_saved, opts)
         vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, lines)
         vim.api.nvim_buf_clear_namespace(popup.bufnr, NS, 0, -1)
 
-        for index, field in ipairs(fields) do
-            local _, placeholder = format_value(field, values)
-            vim.api.nvim_buf_add_highlight(popup.bufnr, NS, "OrchLaunchLabel", index - 1, 2, 2 + label_width)
+        for index = 1, #fields do
+            local span = spans[index]
+            vim.api.nvim_buf_add_highlight(popup.bufnr, NS, "OrchLaunchLabel", index - 1, span.label_start, span.label_end)
+            vim.api.nvim_buf_add_highlight(popup.bufnr, NS, "OrchLaunchHint", index - 1, span.leader_start, span.leader_end)
             vim.api.nvim_buf_add_highlight(
                 popup.bufnr,
                 NS,
-                placeholder and "OrchLaunchHint" or "OrchLaunchValue",
+                span.placeholder and "OrchLaunchHint" or "OrchLaunchValue",
                 index - 1,
-                value_start,
-                -1
+                span.value_start,
+                span.value_end
             )
         end
 
