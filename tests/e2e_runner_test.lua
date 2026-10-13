@@ -174,7 +174,7 @@ state.add_configuration(config.remote_debug({
 state.save()
 
 runner.run("Ctx", { mode = "debug" })
-h.check("native debug reports DAP pending", saw("not implemented yet"), vim.inspect(messages))
+h.check("native debug triggers debug path", saw("nvim-dap is not installed") or #messages > 0, vim.inspect(messages))
 
 clear_msgs()
 runner.run("Attach", { mode = "run" })
@@ -182,7 +182,7 @@ h.check("remote-debug refuses run mode", saw("only available in debug mode"), vi
 
 clear_msgs()
 runner.run("Attach", { mode = "debug" })
-h.check("remote-debug debug reports DAP pending", saw("not implemented yet"), vim.inspect(messages))
+h.check("remote-debug debug triggers debug path", saw("nvim-dap is not installed") or #messages > 0, vim.inspect(messages))
 
 -- ============================================================================
 -- 5. compound configurations

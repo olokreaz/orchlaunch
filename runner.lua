@@ -395,6 +395,39 @@ function M.load_cmake()
     return targets
 end
 
+--- Discovers CMake targets from an existing build directory without reconfiguring.
+---
+--- Useful when configure is expensive and the build already contains a valid
+--- CMake File API reply. Executable targets are turned into native run
+--- configurations (unless a configuration with the same name already exists).
+---@return OrchCMakeTarget[]?
+function M.refresh_cmake()
+    if not state.is_loaded() then
+        notify("no .orch project loaded", ERROR)
+        return nil
+    end
+
+    ensure_settings_saved()
+
+    local targets = cmake.refresh_targets()
+    if not targets or #targets == 0 then
+        notify("CMake targets not found; no existing File API reply in the build directory", ERROR)
+        return nil
+    end
+
+    local created = sync_target_configurations(targets)
+
+    notify(
+        ("CMake targets refreshed: %d target(s) from %s, %d run configuration(s) added"):format(
+            #targets,
+            cmake.source_dir(),
+            created
+        )
+    )
+
+    return targets
+end
+
 --- Runs an external tool by name synchronously.
 ---@param name string
 ---@return OrchProcessResult?

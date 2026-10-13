@@ -249,6 +249,13 @@ function M.register()
         require("orchlaunch.runner").load_cmake()
     end, { desc = "Configure the project and load its CMake targets" })
 
+    vim.api.nvim_create_user_command("OrchLaunchRefreshTargets", function()
+        if not ensure_loaded() then
+            return
+        end
+        require("orchlaunch.runner").refresh_cmake()
+    end, { desc = "Discover CMake targets from an existing build directory (no configure)" })
+
     vim.api.nvim_create_user_command("OrchLaunchExternalTool", function(args)
         if not ensure_loaded() then
             return
