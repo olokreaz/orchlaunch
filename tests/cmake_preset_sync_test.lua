@@ -84,27 +84,31 @@ eq(state.cmake_profile("debug").kind, "configure", "kind persisted")
 eq(state.cmake_profile("debug").enabled, true, "enabled persisted")
 eq(state.cmake_profile("debug-build").enabled, false, "disabled persisted")
 
--- Preset profile scratch editor only exposes env
+-- Preset profile editor only exposes env
 local editor = require("orchlaunch.ui.editor")
 local saved = false
-local handle = editor.open_cmake(state.cmake_profile("debug"), function()
+local renderer = editor.open_cmake(state.cmake_profile("debug"), function()
     saved = true
 end)
-local text = table.concat(vim.api.nvim_buf_get_lines(handle.buf, 0, -1, false), "\n")
-assert(text:find("Derived from configure preset", 1, true), "header mentions preset")
-assert(not text:find("toolchain =", 1, true), "preset profile hides toolchain")
-assert(text:find("environment =", 1, true), "preset profile exposes environment")
+vim.wait(300)
+eq(renderer:get_component_by_id("preset_header") ~= nil, true, "preset editor header")
+eq(renderer:get_component_by_id("toolchain") == nil, true, "preset profile hides toolchain")
+eq(renderer:get_component_by_id("environment") ~= nil, true, "preset profile exposes environment")
 
-vim.api.nvim_buf_set_lines(handle.buf, 0, -1, false, {
-    "return {",
-    '  name = "debug",',
-    "  enabled = true,",
-    '  environment = { MY_VAR = "42" },',
-    "}",
-})
-vim.api.nvim_buf_call(handle.buf, function()
-    vim.cmd("write")
-end)
+renderer:get_component_by_id("environment"):set_current_value("MY_VAR=42")
+local pressed = false
+for _, component in ipairs(renderer:get_focusable_components()) do
+    local props = component:get_props()
+    if type(props.on_press) == "function"
+        and type(props.lines) == "string"
+        and props.lines:find("Save", 1, true)
+    then
+        props.on_press(component)
+        pressed = true
+        break
+    end
+end
+eq(pressed, true, "preset profile Save pressed")
 eq(saved, true, "preset profile saved")
 local updated = state.cmake_profile("debug")
 eq(updated.environment.MY_VAR, "42", "environment override stored")

@@ -639,62 +639,19 @@ function M.open_toolchain(existing, on_saved)
 end
 
 -- ============================================================================
--- CMake profile (scratch-buffer editor)
+-- CMake profile
 -- ============================================================================
 
---- String fields exposed by a manual profile; preset-derived profiles hide
---- everything but `environment`.
-local CMAKE_STRING_FIELDS = {
-    "toolchain",
-    "configure_preset",
-    "build_preset",
-    "test_preset",
-    "package_preset",
-    "workflow_preset",
-    "generator",
-    "build_type",
-    "build_dir",
-    "install_dir",
+--- Preset selectors shown in the profile editor, one per CMake preset kind.
+local CMAKE_PRESET_FIELDS = {
+    { id = "configure_preset", kind = "configure", label = " Configure preset " },
+    { id = "build_preset", kind = "build", label = " Build preset " },
+    { id = "test_preset", kind = "test", label = " Test preset " },
+    { id = "package_preset", kind = "package", label = " Package preset " },
+    { id = "workflow_preset", kind = "workflow", label = " Workflow preset " },
 }
 
-local CMAKE_LIST_FIELDS = { "configure_args", "build_args", "install_args" }
-local CMAKE_ENV_FIELDS = { "definitions", "environment" }
-
---- @param value any
---- @return string?
-local function opt_string(value)
-    if type(value) ~= "string" then
-        return nil
-    end
-    local text = vim.trim(value)
-    return text ~= "" and text or nil
-end
-
---- @param value any
---- @return string[]
-local function opt_list(value)
-    local out = {}
-    if type(value) == "table" then
-        for _, item in ipairs(value) do
-            out[#out + 1] = tostring(item)
-        end
-    end
-    return out
-end
-
---- @param value any
---- @return table<string, string>
-local function opt_map(value)
-    local out = {}
-    if type(value) == "table" then
-        for key, item in pairs(value) do
-            if type(key) == "string" then
-                out[key] = tostring(item)
-            end
-        end
-    end
-    return out
-end
+local CMAKE_BUILD_TYPES = { "Debug", "Release", "RelWithDebInfo", "MinSizeRel" }
 
 --- Header describing what a preset-derived profile inherits (read-only).
 --- @param state table
@@ -736,77 +693,118 @@ local function preset_header_lines(state, profile)
     return out
 end
 
---- Builds the Lua source shown in the scratch buffer.
---- @param state table
---- @param profile table
---- @return string[]
-local function profile_source(state, profile)
-    local config = require("orchlaunch.config")
-    local lines = {}
-
-    if profile.kind then
-        for _, line in ipairs(preset_header_lines(state, profile)) do
-            lines[#lines + 1] = "-- " .. line
-        end
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "return {"
-        lines[#lines + 1] = ("  name = %q,"):format(profile.name or "")
-        lines[#lines + 1] = ("  enabled = %s,"):format(profile.enabled ~= false and "true" or "false")
-        lines[#lines + 1] = "  environment = " .. config.to_lua(profile.environment or {}) .. ","
-        lines[#lines + 1] = "}"
-        return lines
+--- A select with an explicit option list and a bounded height.
+--- @param n table
+--- @param id string
+--- @param label string
+--- @param items { id: string, text: string }[]
+--- @param value string
+--- @param size? integer
+local function select_field(n, id, label, items, value, size)
+    local nodes = {}
+    for _, item in ipairs(items) do
+        nodes[#nodes + 1] = n.option(item.text, { id = item.id })
     end
 
-    lines[#lines + 1] = "-- OrchLaunch CMake profile"
-    lines[#lines + 1] = "-- Edit the fields below, then write (:w or <C-s>) to apply."
-    lines[#lines + 1] = ""
-    lines[#lines + 1] = "return {"
-    lines[#lines + 1] = ("  name = %q,"):format(profile.name or "")
-    lines[#lines + 1] = ("  enabled = %s,"):format(profile.enabled ~= false and "true" or "false")
-
-    for _, field in ipairs(CMAKE_STRING_FIELDS) do
-        lines[#lines + 1] = ("  %s = %q,"):format(field, profile[field] or "")
-    end
-
-    lines[#lines + 1] = ""
-    for _, field in ipairs(CMAKE_LIST_FIELDS) do
-        lines[#lines + 1] = ("  %s = %s,"):format(field, config.to_lua(profile[field] or {}))
-    end
-
-    lines[#lines + 1] = ""
-    for _, field in ipairs(CMAKE_ENV_FIELDS) do
-        lines[#lines + 1] = ("  %s = %s,"):format(field, config.to_lua(profile[field] or {}))
-    end
-
-    lines[#lines + 1] = "}"
-    return lines
+    return n.select({
+        id = id,
+        data = nodes,
+        selected = { id = value },
+        size = size or math.min(math.max(1, #items), 4),
+        border_label = label,
+        border_style = "rounded",
+    })
 end
 
---- @param existing? OrchCMakeProfile
---- @param on_saved? function
-function M.open_cmake(existing, on_saved)
-    local state = require("orchlaunch.state")
-    local config = require("orchlaunch.config")
-    local scratch = require("orchlaunch.ui.scratch")
+--- Builds `(none)` + named options, appending `value` when it is missing.
+--- @param names string[]
+--- @param value? string
+--- @param suffix? string
+--- @return { id: string, text: string }[]
+local function none_items(names, value, suffix)
+    local items = { { id = "(none)", text = "(none)" } }
+    local seen = { ["(none)"] = true }
 
-    local profile = existing
-    local is_preset = profile ~= nil and profile.kind ~= nil
-    if profile == nil then
-        profile = { name = "", enabled = true }
+    for _, name in ipairs(names) do
+        if name ~= "" and not seen[name] then
+            items[#items + 1] = { id = name, text = name }
+            seen[name] = true
+        end
     end
 
-    local lines = profile_source(state, profile)
+    if value and value ~= "" and not seen[value] then
+        items[#items + 1] = { id = value, text = value .. (suffix or "  (missing)") }
+    end
 
-    return scratch.open_lua({
-        title = is_preset and ("CMake profile: " .. profile.name) or "New CMake profile",
-        lines = lines,
-        width = 100,
-        height = math.min(34, #lines + 4),
-        on_save = function(text)
-            local value = config.from_lua(text)
-            assert(type(value.name) == "string", "`name` must be a string")
-            local name = vim.trim(value.name)
-            assert(name ~= "", "`name` must not be empty")
+    return items
+end
+
+--- Toolchain names available for the profile.
+--- @param state table
+--- @return string[]
+local function toolchain_names(state)
+    local names = {}
+    for _, toolchain in ipairs(state.toolchains()) do
+        names[#names + 1] = toolchain.name
+    end
+    return names
+end
+
+--- Visible CMake preset names of a given kind.
+--- @param state table
+--- @param kind string
+--- @return string[]
+local function preset_names(state, kind)
+    local names = {}
+    local presets = state.presets()
+    if presets then
+        for _, preset in ipairs(require("orchlaunch.presets").visible(presets, kind)) do
+            names[#names + 1] = preset.name
+        end
+    end
+    return names
+end
+
+--- Reads a select value, mapping the `(none)` sentinel back to nil.
+--- @param renderer table
+--- @param id string
+--- @return string?
+local function read_opt_choice(renderer, id)
+    local choice = read_choice(renderer, id, "(none)")
+    if choice == nil or choice == "(none)" then
+        return nil
+    end
+    return choice
+end
+
+--- Opens the CMake profile editor. Manual profiles expose every build setting;
+--- preset-derived profiles expose only name/enabled/environment plus a
+--- read-only description of the underlying preset.
+--- @param existing? OrchCMakeProfile
+--- @param on_saved? function
+--- @param opts? table
+function M.open_cmake(existing, on_saved, opts)
+    local n = UI.n()
+    local state = require("orchlaunch.state")
+    local config = require("orchlaunch.config")
+
+    local profile = existing or { name = "", enabled = true }
+    local is_preset = profile.kind ~= nil
+
+    local renderer = UI.renderer(vim.tbl_extend("force", {
+        width = math.max(60, math.min(vim.o.columns - 4, 116)),
+        height = math.max(14, math.min(vim.o.lines - 4, 34)),
+    }, opts or {}))
+
+    --- Wraps a component so it takes an equal share of a `columns` row.
+    local function cell(component)
+        return n.rows({ flex = 1, direction = "column" }, component)
+    end
+
+    local function save()
+        submit(renderer, function()
+            local name = vim.trim(read_text(renderer, "name"))
+            assert(name ~= "", "CMake profile name is required")
             if name ~= (profile.name or "") and state.cmake_profile(name) then
                 error(("CMake profile already exists: %s"):format(name))
             end
@@ -815,44 +813,28 @@ function M.open_cmake(existing, on_saved)
             if is_preset then
                 result = vim.deepcopy(profile)
                 result.name = name
-                result.enabled = value.enabled ~= false
-                result.environment = opt_map(value.environment)
+                result.enabled = read_bool(renderer, "enabled")
+                result.environment = UI.parse_env(read_text(renderer, "environment"))
             else
                 result = config.cmake_settings({
-                    -- name: Profile name (identity)
-  name = name,
-                    -- toolchain: Toolchain name from toolchains.toml
-  toolchain = opt_string(value.toolchain),
-                    -- configure_preset: CMake configure preset
-  configure_preset = opt_string(value.configure_preset),
-                    -- build_preset: CMake build preset
-  build_preset = opt_string(value.build_preset),
-                    -- test_preset: CTest preset
-  test_preset = opt_string(value.test_preset),
-                    -- package_preset: CMake package preset
-  package_preset = opt_string(value.package_preset),
-                    -- workflow_preset: CMake workflow preset
-  workflow_preset = opt_string(value.workflow_preset),
-                    -- generator: e.g. Ninja, Unix Makefiles
-  generator = opt_string(value.generator),
-                    -- build_type: Debug/Release/RelWithDebInfo/MinSizeRel
-  build_type = opt_string(value.build_type),
-                    -- build_dir: Build directory (relative/absolute)
-  build_dir = opt_string(value.build_dir),
-                    -- install_dir: Install directory
-  install_dir = opt_string(value.install_dir),
-                    -- configure_args: Extra cmake configure args
-  configure_args = opt_list(value.configure_args),
-                    -- build_args: Extra cmake --build args
-  build_args = opt_list(value.build_args),
-                    -- install_args: Extra cmake --install args
-  install_args = opt_list(value.install_args),
-                    -- definitions: CMake cache definitions (-D...)
-  definitions = opt_map(value.definitions),
-                    -- environment: Environment variables
-  environment = opt_map(value.environment),
+                    name = name,
+                    toolchain = read_opt_choice(renderer, "toolchain"),
+                    configure_preset = read_opt_choice(renderer, "configure_preset"),
+                    build_preset = read_opt_choice(renderer, "build_preset"),
+                    test_preset = read_opt_choice(renderer, "test_preset"),
+                    package_preset = read_opt_choice(renderer, "package_preset"),
+                    workflow_preset = read_opt_choice(renderer, "workflow_preset"),
+                    generator = trimmed(read_text(renderer, "generator")),
+                    build_type = read_opt_choice(renderer, "build_type"),
+                    build_dir = trimmed(read_text(renderer, "build_dir")),
+                    install_dir = trimmed(read_text(renderer, "install_dir")),
+                    configure_args = UI.lines(read_text(renderer, "configure_args")),
+                    build_args = UI.lines(read_text(renderer, "build_args")),
+                    install_args = UI.lines(read_text(renderer, "install_args")),
+                    definitions = UI.parse_env(read_text(renderer, "definitions")),
+                    environment = UI.parse_env(read_text(renderer, "environment")),
                 })
-                result.enabled = value.enabled ~= false
+                result.enabled = read_bool(renderer, "enabled")
             end
 
             if profile.name and profile.name ~= "" then
@@ -860,10 +842,95 @@ function M.open_cmake(existing, on_saved)
             else
                 state.add_cmake_profile(result)
             end
-            state.save()
-        end,
-        on_close = on_saved,
-    })
+        end, on_saved)
+    end
+
+    local content
+    if is_preset then
+        local header = {}
+        for _, line in ipairs(preset_header_lines(state, profile)) do
+            header[#header + 1] = "-- " .. line
+        end
+
+        content = n.rows(
+            { flex = 1, direction = "column" },
+            n.paragraph({ id = "preset_header", lines = table.concat(header, "\n"), max_lines = 12 }),
+            n.gap(1),
+            n.columns(
+                { flex = 1 },
+                cell(input(n, "name", " Name ", profile.name, { autofocus = true })),
+                n.gap(2),
+                cell(check(n, "enabled", " Enabled", profile.enabled ~= false))
+            ),
+            n.gap(1),
+            input(n, "environment", " Environment (KEY=VALUE, one per line) ", UI.format_env(profile.environment), { size = 6 }),
+            n.gap(1),
+            footer(n, renderer, save)
+        )
+    else
+        content = n.rows(
+            { flex = 1, direction = "column" },
+            n.columns(
+                { flex = 1 },
+                cell(input(n, "name", " Name ", profile.name, { autofocus = true })),
+                n.gap(2),
+                cell(check(n, "enabled", " Enabled", profile.enabled ~= false))
+            ),
+            n.gap(1),
+            n.columns(
+                { flex = 1 },
+                cell(select_field(n, "toolchain", " Toolchain ", none_items(toolchain_names(state), profile.toolchain), profile.toolchain or "(none)", 4)),
+                n.gap(2),
+                cell(input(n, "generator", " Generator (e.g. Ninja) ", profile.generator))
+            ),
+            n.gap(1),
+            n.columns(
+                { flex = 1 },
+                cell(select_field(n, "build_type", " Build type ", none_items(CMAKE_BUILD_TYPES, profile.build_type, "  (custom)"), profile.build_type or "(none)", 4)),
+                n.gap(2),
+                cell(input(n, "build_dir", " Build directory ", profile.build_dir)),
+                n.gap(2),
+                cell(input(n, "install_dir", " Install directory ", profile.install_dir))
+            ),
+            n.gap(1),
+            n.columns(
+                { flex = 1 },
+                cell(select_field(n, "configure_preset", " Configure preset ", none_items(preset_names(state, "configure"), profile.configure_preset), profile.configure_preset or "(none)", 4)),
+                n.gap(2),
+                cell(select_field(n, "build_preset", " Build preset ", none_items(preset_names(state, "build"), profile.build_preset), profile.build_preset or "(none)", 4)),
+                n.gap(2),
+                cell(select_field(n, "test_preset", " Test preset ", none_items(preset_names(state, "test"), profile.test_preset), profile.test_preset or "(none)", 4))
+            ),
+            n.gap(1),
+            n.columns(
+                { flex = 1 },
+                cell(select_field(n, "package_preset", " Package preset ", none_items(preset_names(state, "package"), profile.package_preset), profile.package_preset or "(none)", 3)),
+                n.gap(2),
+                cell(select_field(n, "workflow_preset", " Workflow preset ", none_items(preset_names(state, "workflow"), profile.workflow_preset), profile.workflow_preset or "(none)", 3))
+            ),
+            n.gap(1),
+            n.columns(
+                { flex = 1 },
+                cell(input(n, "configure_args", " Configure args (one per line) ", UI.format_lines(profile.configure_args), { size = 3 })),
+                n.gap(2),
+                cell(input(n, "build_args", " Build args (one per line) ", UI.format_lines(profile.build_args), { size = 3 })),
+                n.gap(2),
+                cell(input(n, "install_args", " Install args (one per line) ", UI.format_lines(profile.install_args), { size = 3 }))
+            ),
+            n.gap(1),
+            n.columns(
+                { flex = 1 },
+                cell(input(n, "definitions", " Definitions (-DKEY=VALUE, one per line) ", UI.format_env(profile.definitions), { size = 4 })),
+                n.gap(2),
+                cell(input(n, "environment", " Environment (KEY=VALUE, one per line) ", UI.format_env(profile.environment), { size = 4 }))
+            ),
+            n.gap(1),
+            footer(n, renderer, save)
+        )
+    end
+
+    renderer:render(content)
+    return renderer
 end
 
 --- Edits the project-wide CMake project directory (`[cmake] source_dir`).
