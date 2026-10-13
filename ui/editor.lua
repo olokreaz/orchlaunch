@@ -935,37 +935,42 @@ end
 
 --- Edits the project-wide CMake project directory (`[cmake] source_dir`).
 --- @param on_saved? function
-function M.open_cmake_project(on_saved)
+--- @param opts? table
+function M.open_cmake_project(on_saved, opts)
+    local n = UI.n()
     local state = require("orchlaunch.state")
-    local config = require("orchlaunch.config")
-    local scratch = require("orchlaunch.ui.scratch")
 
-    local raw = state.cmake_source_dir_raw()
-    local lines = {
-        "-- OrchLaunch CMake project",
-        "-- Directory holding CMakeLists.txt and CMakePresets.json.",
-        "-- Empty or \"${workspace}\" uses the .orch project root.",
-        ("-- Resolved: %s"):format(state.cmake_source_dir()),
-        "-- Write with :w or <C-s>; close with q or <Esc>.",
-        "",
-        "return {",
-        ("  source_dir = %q,"):format(raw or ""),
-        "}",
-    }
+    local renderer = UI.renderer(vim.tbl_extend("force", {
+        width = math.max(50, math.min(vim.o.columns - 4, 84)),
+        height = 15,
+    }, opts or {}))
 
-    return scratch.open_lua({
-        title = "CMake project",
-        lines = lines,
-        width = 100,
-        height = 16,
-        on_save = function(text)
-            local value = config.from_lua(text)
-            local source_dir = type(value.source_dir) == "string" and vim.trim(value.source_dir) or ""
-            state.set_cmake_source_dir(source_dir ~= "" and source_dir or nil)
-            state.save()
-        end,
-        on_close = on_saved,
-    })
+    local function save()
+        submit(renderer, function()
+            local value = vim.trim(read_text(renderer, "source_dir"))
+            state.set_cmake_source_dir(value ~= "" and value or nil)
+        end, on_saved)
+    end
+
+    local content = n.rows(
+        { flex = 1, direction = "column" },
+        n.paragraph({
+            id = "cmake_project_hint",
+            lines = table.concat({
+                "Directory holding CMakeLists.txt and CMakePresets.json.",
+                "Leave empty (or \"${workspace}\") to use the .orch project root.",
+                ("Resolved: %s"):format(state.cmake_source_dir()),
+            }, "\n"),
+            max_lines = 3,
+        }),
+        n.gap(1),
+        input(n, "source_dir", " CMake project directory ", state.cmake_source_dir_raw(), { autofocus = true }),
+        n.gap(1),
+        footer(n, renderer, save)
+    )
+
+    renderer:render(content)
+    return renderer
 end
 
 return M
