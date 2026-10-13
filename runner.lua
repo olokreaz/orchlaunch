@@ -178,6 +178,13 @@ local function launch_native(name, mode)
     end
 
     local target = cfg.target
+
+    -- Run before-launch actions first: a build/install step may be what makes
+    -- the target resolvable.
+    if not run_before(cfg.before) then
+        return
+    end
+
     local program = state.resolve_path(target)
     local looks_like_path = target:find("[/\\]") ~= nil or vim.fn.filereadable(program or "") == 1
 
@@ -190,14 +197,6 @@ local function launch_native(name, mode)
             )
             return
         end
-    end
-
-    if not run_before(cfg.before) then
-        return
-    end
-
-    if not looks_like_path then
-        program = cmake.find_target(target) or program
     end
 
     local spec = {

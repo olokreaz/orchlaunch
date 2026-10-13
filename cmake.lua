@@ -313,7 +313,9 @@ function M.test_spec()
         end
     end
 
-    return spec_from(argv, M.binary_dir(), preset_environment(M.resolved("test")))
+    -- ctest resolves presets from the working directory, and presets live in
+    -- the source directory; `--test-dir` (non-preset mode) points at the build.
+    return spec_from(argv, M.source_dir(), preset_environment(M.resolved("test")))
 end
 
 -- ============================================================================
