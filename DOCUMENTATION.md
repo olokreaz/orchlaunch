@@ -104,13 +104,19 @@ Choosing **Set active** enables the profile.
 The editor is a `nui.nvim` field list. Move with `j`/`k` (or arrows), press
 `<CR>` to edit the focused field (text prompt, option menu or multi-line
 editor), `<Space>` to toggle booleans, `<C-s>` to save and `q`/`<Esc>` to close.
-Manual profiles expose every field (name, enabled, toolchain, generator, build
-type, directories, the five preset selections, args, definitions, environment).
+Labels and values are colour-highlighted and the border title tracks the profile
+name.
+
+Manual profiles expose every field — name, enabled, toolchain, generator, build
+type, directories, args, definitions and environment — and never reference
+presets. A new profile is pre-filled with `generator = "Ninja"` and
+`build_type = "Debug"`; the generator select lists the common CMake generators
+(and keeps a custom value if one was set).
 
 Preset-derived profiles are **read-only**: they are imported from
 `CMakePresets.json` / `CMakeUserPresets.json` (and their includes) and cannot be
 created or edited here — only viewed. Change the preset file and re-import
-instead. A new profile is always a manual one.
+instead.
 
 The active profile's configure preset's `binaryDir` (after macro expansion)
 becomes the build directory; otherwise the profile's `build_dir` applies,

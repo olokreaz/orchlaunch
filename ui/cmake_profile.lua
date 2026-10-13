@@ -1,9 +1,12 @@
 -- OrchLaunch — CMake profile editor built on raw nui.nvim.
 --
--- Manual profiles are fully editable. Profiles carrying a `kind` are imported
--- from CMakePresets.json / CMakeUserPresets.json (and any included files), so
--- they cannot be created or edited here — only viewed. Manage them in the
--- preset JSON files and re-import through the profile list.
+-- A manual profile is self-contained: name, toolchain, generator, build type,
+-- directories, args, definitions and environment. It never references presets.
+--
+-- Profiles carrying a `kind` are imported from CMakePresets.json /
+-- CMakeUserPresets.json (and any included files). They cannot be created or
+-- edited here — only viewed. Manage them in the preset JSON files and re-import
+-- through the profile list.
 
 local Popup = require("nui.popup")
 local Input = require("nui.input")
@@ -14,23 +17,30 @@ local UI = require("orchlaunch.ui")
 
 local M = {}
 
+local NS = vim.api.nvim_create_namespace("orchlaunch_cmake_profile")
+
+--- Common CMake generators offered in the generator select.
+local GENERATORS = {
+    "Ninja",
+    "Ninja Multi-Config",
+    "Unix Makefiles",
+    "MinGW Makefiles",
+    "MSYS Makefiles",
+    "NMake Makefiles",
+    "NMake Makefiles JOM",
+    "Visual Studio 17 2022",
+    "Visual Studio 16 2019",
+    "Xcode",
+}
+
 local BUILD_TYPES = { "Debug", "Release", "RelWithDebInfo", "MinSizeRel" }
 
---- @param state table
---- @param kind string
---- @return string[]
-local function preset_names(state, kind)
-    local presets = require("orchlaunch.presets")
-    local discovered = state.presets()
-    local names = {}
-
-    if discovered then
-        for _, preset in ipairs(presets.visible(discovered, kind)) do
-            names[#names + 1] = preset.name
-        end
-    end
-
-    return names
+local function ensure_highlights()
+    vim.api.nvim_set_hl(0, "OrchLaunchLabel", { link = "Title", default = true })
+    vim.api.nvim_set_hl(0, "OrchLaunchValue", { link = "Normal", default = true })
+    vim.api.nvim_set_hl(0, "OrchLaunchHint", { link = "Comment", default = true })
+    vim.api.nvim_set_hl(0, "OrchLaunchBorder", { link = "FloatBorder", default = true })
+    vim.api.nvim_set_hl(0, "OrchLaunchCursorLine", { link = "Visual", default = true })
 end
 
 --- @param state table
@@ -43,21 +53,18 @@ local function toolchain_names(state)
     return names
 end
 
+--- Editable (manual) profile fields — nothing preset-related.
+--- @param state table
 --- @return table[]
-local function editable_fields(state)
+local function manual_fields(state)
     return {
-        { id = "name", label = "Name", kind = "string", required = true },
+        { id = "name", label = "Name", kind = "string" },
         { id = "enabled", label = "Enabled", kind = "bool" },
         { id = "toolchain", label = "Toolchain", kind = "select", options = toolchain_names(state) },
-        { id = "generator", label = "Generator", kind = "string" },
+        { id = "generator", label = "Generator", kind = "select", options = GENERATORS },
         { id = "build_type", label = "Build type", kind = "select", options = BUILD_TYPES },
         { id = "build_dir", label = "Build dir", kind = "string" },
         { id = "install_dir", label = "Install dir", kind = "string" },
-        { id = "configure_preset", label = "Configure preset", kind = "select", options = preset_names(state, "configure") },
-        { id = "build_preset", label = "Build preset", kind = "select", options = preset_names(state, "build") },
-        { id = "test_preset", label = "Test preset", kind = "select", options = preset_names(state, "test") },
-        { id = "package_preset", label = "Package preset", kind = "select", options = preset_names(state, "package") },
-        { id = "workflow_preset", label = "Workflow preset", kind = "select", options = preset_names(state, "workflow") },
         { id = "configure_args", label = "Configure args", kind = "lines" },
         { id = "build_args", label = "Build args", kind = "lines" },
         { id = "install_args", label = "Install args", kind = "lines" },
@@ -66,12 +73,13 @@ local function editable_fields(state)
     }
 end
 
+--- Read-only fields for a preset-derived ("imported") profile.
 --- @return table[]
-local function readonly_fields()
+local function imported_fields()
     return {
         { id = "name", label = "Name", kind = "string", readonly = true },
         { id = "enabled", label = "Enabled", kind = "bool", readonly = true },
-        { id = "kind", label = "Source", kind = "string", readonly = true },
+        { id = "kind", label = "Imported from", kind = "string", readonly = true },
         { id = "configure_preset", label = "Configure preset", kind = "string", readonly = true },
         { id = "build_preset", label = "Build preset", kind = "string", readonly = true },
         { id = "test_preset", label = "Test preset", kind = "string", readonly = true },
@@ -81,10 +89,23 @@ local function readonly_fields()
     }
 end
 
---- @param profile table?
+--- @param profile? table
 --- @return table
 local function snapshot(profile)
-    profile = profile or {}
+    if profile == nil then
+        return {
+            name = "",
+            enabled = true,
+            generator = "Ninja",
+            build_type = "Debug",
+            configure_args = {},
+            build_args = {},
+            install_args = {},
+            definitions = {},
+            environment = {},
+        }
+    end
+
     return {
         name = profile.name or "",
         enabled = profile.enabled ~= false,
@@ -94,11 +115,6 @@ local function snapshot(profile)
         build_type = profile.build_type,
         build_dir = profile.build_dir,
         install_dir = profile.install_dir,
-        configure_preset = profile.configure_preset,
-        build_preset = profile.build_preset,
-        test_preset = profile.test_preset,
-        package_preset = profile.package_preset,
-        workflow_preset = profile.workflow_preset,
         configure_args = vim.deepcopy(profile.configure_args or {}),
         build_args = vim.deepcopy(profile.build_args or {}),
         install_args = vim.deepcopy(profile.install_args or {}),
@@ -109,17 +125,20 @@ end
 
 --- @param field table
 --- @param values table
---- @return string
+--- @return string text, boolean placeholder
 local function format_value(field, values)
     local value = values[field.id]
 
     if field.kind == "bool" then
-        return value and "[x]" or "[ ]"
+        return value and "[x]" or "[ ]", false
     end
 
     if field.kind == "lines" then
         local count = #(value or {})
-        return count == 0 and "(empty)" or ("%d item(s)"):format(count)
+        if count == 0 then
+            return "(empty)", true
+        end
+        return ("%d item(s)"):format(count), false
     end
 
     if field.kind == "env" then
@@ -127,19 +146,23 @@ local function format_value(field, values)
         for _ in pairs(value or {}) do
             count = count + 1
         end
-        return count == 0 and "(empty)" or ("%d entr%s"):format(count, count == 1 and "y" or "ies")
+        if count == 0 then
+            return "(empty)", true
+        end
+        return ("%d entr%s"):format(count, count == 1 and "y" or "ies"), false
     end
 
     if value == nil or value == "" then
-        return "(unset)"
+        return "(unset)", true
     end
 
-    return tostring(value)
+    return tostring(value), false
 end
 
 --- @param values table
+--- @param original? table
 --- @return table
-local function to_profile(values)
+local function to_profile(values, original)
     local function trimmed(value)
         return type(value) == "string" and vim.trim(value) or value
     end
@@ -155,11 +178,6 @@ local function to_profile(values)
         "build_type",
         "build_dir",
         "install_dir",
-        "configure_preset",
-        "build_preset",
-        "test_preset",
-        "package_preset",
-        "workflow_preset",
     }) do
         local value = trimmed(values[key])
         if type(value) == "string" and value ~= "" then
@@ -181,41 +199,65 @@ local function to_profile(values)
         end
     end
 
+    -- Preserve preset references on legacy profiles without exposing them.
+    if original then
+        for _, key in ipairs({
+            "kind",
+            "configure_preset",
+            "build_preset",
+            "test_preset",
+            "package_preset",
+            "workflow_preset",
+        }) do
+            if original[key] ~= nil then
+                profile[key] = original[key]
+            end
+        end
+    end
+
     return profile
 end
 
---- Opens the CMake profile editor.
---- @param existing table? Profile to edit (nil creates a new manual profile).
---- @param on_saved? function Called after the editor closes (with or without changes).
+--- @param existing? table
+--- @param on_saved? function
 --- @param opts? table
---- @return table popup The mounted nui popup (also exposes `.orch` test hooks).
+--- @return table popup
 function M.open(existing, on_saved, opts)
     opts = opts or {}
-    local state = require("orchlaunch.state")
+    ensure_highlights()
 
+    local state = require("orchlaunch.state")
     local readonly = existing ~= nil and existing.kind ~= nil
     local original_name = existing and existing.name or nil
-    local fields = readonly and readonly_fields() or editable_fields(state)
+    local fields = readonly and imported_fields() or manual_fields(state)
     local values = snapshot(existing)
 
     local selected = 1
     local closed = false
 
+    local width = math.max(56, math.min(100, math.floor(vim.o.columns * 0.62)))
+
     local popup = Popup({
         relative = opts.relative or "editor",
         position = opts.position or "50%",
-        size = { width = opts.width or 66, height = #fields + 2 },
+        size = { width = width, height = #fields + 2 },
         border = {
             style = "rounded",
             text = {
-                top = (" CMake profile: %s "):format(vim.trim(values.name) ~= "" and values.name or "(new)"),
+                top = " CMake profile ",
                 top_align = "center",
                 bottom = readonly and " imported from CMakePresets.json · q close "
                     or " <CR> edit · <Space> toggle · j/k move · <C-s> save · q close ",
                 bottom_align = "center",
             },
         },
-        win_options = { cursorline = true, wrap = false, number = false, signcolumn = "no" },
+        win_options = {
+            cursorline = true,
+            wrap = false,
+            number = false,
+            signcolumn = "no",
+            winhighlight = "FloatBorder:OrchLaunchBorder,CursorLine:OrchLaunchCursorLine",
+        },
         buf_options = { modifiable = false, bufhidden = "wipe" },
     })
 
@@ -226,26 +268,47 @@ function M.open(existing, on_saved, opts)
     end
 
     local function render()
-        local width = 0
+        local label_width = 0
         for _, field in ipairs(fields) do
-            width = math.max(width, vim.api.nvim_strwidth(field.label))
+            label_width = math.max(label_width, vim.api.nvim_strwidth(field.label))
         end
 
+        local value_start = 2 + label_width + 3
         local lines = {}
+
         for index, field in ipairs(fields) do
-            local label = field.label .. string.rep(" ", width - vim.api.nvim_strwidth(field.label))
-            lines[index] = ("  %s   %s"):format(label, format_value(field, values))
+            local label = field.label .. string.rep(" ", label_width - vim.api.nvim_strwidth(field.label))
+            local value = format_value(field, values)
+            lines[index] = ("  %s   %s"):format(label, value)
         end
 
         selected = math.max(1, math.min(selected, #fields))
 
         vim.bo[popup.bufnr].modifiable = true
         vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, lines)
+        vim.api.nvim_buf_clear_namespace(popup.bufnr, NS, 0, -1)
+
+        for index, field in ipairs(fields) do
+            local _, placeholder = format_value(field, values)
+            vim.api.nvim_buf_add_highlight(popup.bufnr, NS, "OrchLaunchLabel", index - 1, 2, 2 + label_width)
+            vim.api.nvim_buf_add_highlight(
+                popup.bufnr,
+                NS,
+                placeholder and "OrchLaunchHint" or "OrchLaunchValue",
+                index - 1,
+                value_start,
+                -1
+            )
+        end
+
         vim.bo[popup.bufnr].modifiable = false
 
         if vim.api.nvim_win_is_valid(popup.winid) then
             vim.api.nvim_win_set_cursor(popup.winid, { selected, 0 })
         end
+
+        local title = vim.trim(values.name)
+        popup.border:set_text("top", (" CMake profile: %s "):format(title ~= "" and title or "new"), "center")
     end
 
     local function set_field(field, value)
@@ -259,11 +322,12 @@ function M.open(existing, on_saved, opts)
         local input = Input({
             relative = "editor",
             position = "50%",
-            size = { width = math.min(72, math.max(36, vim.api.nvim_strwidth(value) + 12)) },
+            size = { width = math.min(84, math.max(40, vim.api.nvim_strwidth(value) + 16)) },
             border = {
                 style = "rounded",
                 text = { top = (" %s "):format(field.label), top_align = "center" },
             },
+            win_options = { winhighlight = "FloatBorder:OrchLaunchBorder,NormalFloat:Normal" },
         }, {
             prompt = "> ",
             default_value = value,
@@ -307,14 +371,15 @@ function M.open(existing, on_saved, opts)
         local menu = Menu({
             relative = "editor",
             position = "50%",
-            size = { width = 48 },
+            size = { width = math.min(60, math.max(30, width - 12)) },
             border = {
                 style = "rounded",
                 text = { top = (" %s "):format(field.label), top_align = "center" },
             },
+            win_options = { winhighlight = "FloatBorder:OrchLaunchBorder,NormalFloat:Normal,CursorLine:OrchLaunchCursorLine" },
         }, {
             lines = lines,
-            max_width = 48,
+            max_width = math.max(30, width - 12),
             max_height = 12,
             keymap = {
                 close = { "<Esc>", "<C-c>", "q" },
@@ -348,7 +413,7 @@ function M.open(existing, on_saved, opts)
         local box = Popup({
             relative = "editor",
             position = "50%",
-            size = { width = 72, height = 13 },
+            size = { width = math.max(60, width - 6), height = 13 },
             border = {
                 style = "rounded",
                 text = {
@@ -359,7 +424,11 @@ function M.open(existing, on_saved, opts)
                     bottom_align = "center",
                 },
             },
-            win_options = { cursorline = true, wrap = false },
+            win_options = {
+                cursorline = true,
+                wrap = false,
+                winhighlight = "FloatBorder:OrchLaunchBorder,NormalFloat:Normal,CursorLine:OrchLaunchCursorLine",
+            },
             buf_options = { modifiable = true, bufhidden = "wipe" },
         })
 
@@ -455,7 +524,7 @@ function M.open(existing, on_saved, opts)
             return
         end
 
-        local profile = to_profile(values)
+        local profile = to_profile(values, existing)
         if original_name then
             state.update_cmake_profile(original_name, profile)
         else
@@ -510,6 +579,8 @@ function M.open(existing, on_saved, opts)
 
     popup:mount()
     render()
+    focus()
+    vim.schedule(focus)
 
     popup.orch = {
         fields = fields,
