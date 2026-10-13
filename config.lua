@@ -638,18 +638,16 @@ end
 
 ---@class OrchRemoteDebugOptions
 ---@field name string
----@field symbol string
+---@field symbol? string
 ---@field connection string
----@field adapter string
+---@field adapter? string
 ---@field before? OrchBefore
 
 ---@param opts OrchRemoteDebugOptions
 ---@return OrchRemoteDebugConfiguration
 function M.remote_debug(opts)
     assert(opts.name and opts.name ~= "", "remote-debug configuration requires `name`")
-    assert(opts.symbol and opts.symbol ~= "", "remote-debug configuration requires `symbol`")
     assert(opts.connection and opts.connection ~= "", "remote-debug configuration requires `connection`")
-    assert(opts.adapter and opts.adapter ~= "", "remote-debug configuration requires `adapter`")
 
     return {
         name = opts.name,

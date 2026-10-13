@@ -168,7 +168,31 @@ local function launch_native(name, mode)
     local cfg = state.require_configuration(name)
 
     if mode == "debug" then
-        notify(("debugging %q is not implemented yet (DAP integration pending)"):format(name), WARN)
+        local dbg = require("orchlaunch.debug")
+        if not cfg.target or cfg.target == "" then
+            notify(("configuration %q has no target"):format(name), ERROR)
+            return
+        end
+        if not run_before(cfg.before) then
+            return
+        end
+        local target = cfg.target
+        local program = state.resolve_path(target)
+        local looks_like_path = target:find("[/\\]") ~= nil or vim.fn.filereadable(program or "") == 1
+        if not looks_like_path then
+            program = cmake.find_target(target)
+            if not program then
+                notify(("cannot resolve CMake target %q; build it first or set target to an executable path"):format(target), ERROR)
+                return
+            end
+        end
+        dbg.start(cfg, {
+            type = "launch",
+            program = program,
+            args = state.resolve_list(cfg.args),
+            cwd = state.resolve_path(cfg.cwd) or state.root(),
+            env = state.resolve_environment(cfg.environment),
+        })
         return
     end
 
@@ -179,8 +203,6 @@ local function launch_native(name, mode)
 
     local target = cfg.target
 
-    -- Run before-launch actions first: a build/install step may be what makes
-    -- the target resolvable.
     if not run_before(cfg.before) then
         return
     end
@@ -242,7 +264,9 @@ local function launch_remote_debug(name, mode)
         return
     end
 
-    notify(("remote debugging %q is not implemented yet (DAP integration pending)"):format(name), WARN)
+    local cfg = state.require_configuration(name)
+    local dbg = require("orchlaunch.debug")
+    dbg.start(cfg, { type = "attach", connection = cfg.connection, program = cfg.symbol })
 end
 
 --- Runs (or debugs) a configuration by name.
