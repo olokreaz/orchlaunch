@@ -1,12 +1,7 @@
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
+local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+package.path = here .. "/?.lua;" .. package.path
+require("harness")
+
 local root = vim.fn.tempname(); vim.fn.mkdir(root, "p")
 vim.cmd("cd " .. root)
 local orch = require("orchlaunch"); local state = require("orchlaunch.state"); local config = require("orchlaunch.config")

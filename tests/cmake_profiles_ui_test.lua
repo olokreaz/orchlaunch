@@ -1,14 +1,8 @@
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
+local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+package.path = here .. "/?.lua;" .. package.path
+require("harness")
 
-local root = "/tmp/opencode/orch_proj_cmakeui"
+local root = vim.fn.tempname()
 vim.fn.delete(root, "rf")
 vim.fn.mkdir(root, "p")
 

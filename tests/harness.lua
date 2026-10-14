@@ -6,19 +6,35 @@
 --   package.path = here .. "/?.lua;" .. package.path
 --   local h = require("harness")
 --
--- which appends the runtime path entries the plugin needs and exposes the
--- assertion/reporting helpers used across the suite.
+-- which puts the plugin root on the runtimepath together with its
+-- dependencies, and exposes the assertion/reporting helpers used across the
+-- suite. Paths are resolved relative to this file, so the suite is portable:
+-- no absolute paths are baked in.
 
-local NVIM_ROOT = "/home/olokreaz/.config/nvim"
-local LAZY = "/home/olokreaz/.local/share/nvim/lazy"
+-- `source` is <root>/tests/harness.lua; its grandparent is the plugin root
+-- that holds `lua/orchlaunch`.
+local ROOT = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 
-for _, path in ipairs({
-    NVIM_ROOT,
-    LAZY .. "/nui.nvim",
-    LAZY .. "/nui-components.nvim",
-    LAZY .. "/toml.nvim",
-}) do
-    vim.opt.rtp:append(path)
+vim.opt.rtp:append(ROOT)
+
+-- Dependencies live next to the plugin in a plugin manager. Resolve them from
+-- the standard locations; an `ORCHLAUNCH_DEPS` env var can override the root.
+local deps_roots = {}
+if vim.env.ORCHLAUNCH_DEPS and vim.env.ORCHLAUNCH_DEPS ~= "" then
+    deps_roots[#deps_roots + 1] = vim.env.ORCHLAUNCH_DEPS
+end
+deps_roots[#deps_roots + 1] = vim.fn.stdpath("data") .. "/lazy"
+deps_roots[#deps_roots + 1] = vim.fn.stdpath("data") .. "/site/pack/deps/start"
+deps_roots[#deps_roots + 1] = vim.fn.stdpath("data") .. "/site/pack/core/opt"
+
+for _, name in ipairs({ "nui.nvim", "nui-components.nvim", "toml.nvim" }) do
+    for _, deps in ipairs(deps_roots) do
+        local path = deps .. "/" .. name
+        if vim.fn.isdirectory(path) == 1 then
+            vim.opt.rtp:append(path)
+            break
+        end
+    end
 end
 
 local M = {}

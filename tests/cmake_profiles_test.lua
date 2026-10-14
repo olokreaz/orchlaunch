@@ -1,12 +1,6 @@
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
+local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+package.path = here .. "/?.lua;" .. package.path
+require("harness")
 
 local function write(path, content)
     local f = assert(io.open(path, "w"))
@@ -21,7 +15,7 @@ local function read(path)
     return c
 end
 
-local root = "/tmp/opencode/orch_proj_profiles"
+local root = vim.fn.tempname()
 vim.fn.delete(root, "rf")
 vim.fn.mkdir(root .. "/.orch", "p")
 
@@ -89,7 +83,7 @@ state.remove_cmake_profile("RelWithDebInfo")
 eq(state.active_cmake_profile(), "Debug", "active falls back after removal")
 
 -- Legacy migration
-local legacy_root = "/tmp/opencode/orch_proj_legacy"
+local legacy_root = vim.fn.tempname()
 vim.fn.delete(legacy_root, "rf")
 vim.fn.mkdir(legacy_root .. "/.orch", "p")
 write(legacy_root .. "/.orch/cmake_settings.toml", "[cmake]\ntoolchain = \"Gcc\"\nbuild_dir = \"build\"\ngenerator = \"Ninja\"\n")

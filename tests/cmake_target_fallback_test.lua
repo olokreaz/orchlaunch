@@ -1,9 +1,9 @@
 -- Integration test: `load_targets` keeps serving the last File API reply when a
 -- reconfigure fails, so targets stay available (e.g. a missing toolchain).
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
+
+local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+package.path = here .. "/?.lua;" .. package.path
+require("harness")
 
 local failures = 0
 local function check(name, ok, err)

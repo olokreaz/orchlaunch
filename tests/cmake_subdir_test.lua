@@ -1,19 +1,9 @@
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
 -- .orch lives in the project root, but CMake source + presets live in a
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
 -- subdirectory named by the profile's `source_dir`.
 
-local function add(rtp)
-    vim.opt.rtp:append(rtp)
-end
-
-add("/home/olokreaz/.config/nvim")
-add("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-add("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-add("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
+local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+package.path = here .. "/?.lua;" .. package.path
+require("harness")
 
 local function eq(a, b, msg)
     if vim.inspect(a) ~= vim.inspect(b) then
@@ -28,7 +18,7 @@ local function write(path, content)
     f:close()
 end
 
-local root = "/tmp/opencode/orch_proj_subdir"
+local root = vim.fn.tempname()
 vim.fn.delete(root, "rf")
 vim.fn.mkdir(root .. "/boo", "p")
 

@@ -1,9 +1,8 @@
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
+local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+package.path = here .. "/?.lua;" .. package.path
+require("harness")
+
 local function fail(msg)
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
     io.stderr:write("FAIL: " .. msg .. "\n")
     os.exit(1)
 end
@@ -12,7 +11,7 @@ local function ok(msg)
     io.stdout:write("ok: " .. msg .. "\n")
 end
 
-local ws = "/tmp/opencode/orchws"
+local ws = vim.fn.tempname()
 vim.fn.delete(ws, "rf")
 vim.fn.mkdir(ws, "p")
 

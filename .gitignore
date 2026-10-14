@@ -1,0 +1,13 @@
+# Lua bytecode
+*.luac
+luac.out
+
+# Neovim
+doc/tags
+*.swp
+*.swo
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

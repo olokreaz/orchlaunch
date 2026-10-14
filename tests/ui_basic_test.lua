@@ -1,18 +1,8 @@
-vim.opt.rtp:append("/home/olokreaz/.config/nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
 -- Headless smoke test for the OrchLaunch UI/commands layer.
-vim.opt.rtp:append("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
 
-local function add(rtp)
-    vim.opt.rtp:append(rtp)
-end
-
-add("/home/olokreaz/.config/nvim")
-add("/home/olokreaz/.local/share/nvim/lazy/nui.nvim")
-add("/home/olokreaz/.local/share/nvim/lazy/nui-components.nvim")
-add("/home/olokreaz/.local/share/nvim/lazy/toml.nvim")
+local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+package.path = here .. "/?.lua;" .. package.path
+require("harness")
 
 local failures = 0
 local function check(name, ok, err)

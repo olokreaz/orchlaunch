@@ -279,29 +279,35 @@ orch.debug("Attach") -- debug a configuration
 ## Project layout
 
 ```text
-orchlaunch/
-├── init.lua         -- setup(), public entry points
-├── config.lua       -- TOML I/O, factories, serialization
-├── state.lua        -- the loaded project and its API
-├── project.lua      -- locating/creating .orch projects
-├── cmake.lua        -- CMake specs + File API target discovery
-├── presets.lua      -- CMakePresets.json parsing/resolution
-├── runner.lua       -- run/debug dispatch, before-launch steps
-├── process.lua      -- process execution helpers
-├── active.lua       -- remembers the active configuration per project
-├── types.lua        -- LuaCATS type definitions
-├── commands.lua     -- user commands
-├── tests/           -- headless test suite
-└── ui/              -- nui-components browser, editors, dialogs
+orchlauncher.nvim/
+├── lua/orchlaunch/
+│   ├── init.lua        -- setup() and the public API
+│   ├── config.lua      -- TOML I/O, factories and serialization
+│   ├── state.lua       -- the loaded project and the API every module uses
+│   ├── presets.lua     -- CMakePresets.json resolution
+│   ├── runner.lua      -- run/debug dispatch, before-launch steps
+│   ├── process.lua     -- process execution helpers
+│   ├── active.lua      -- remembers the active configuration per project
+│   ├── types.lua       -- LuaCATS type definitions
+│   ├── commands.lua    -- user commands
+│   ├── cmake.lua       -- CMake configuration and target discovery
+│   └── ui/             -- nui-components browser, editors and dialogs
+├── tests/              -- headless test suite
+└── README.md
 ```
 
 ## Development
 
-The test suite is headless and runs all `*_test.lua` files:
+The test suite is headless and runs all `*_test.lua` files. It resolves the
+plugin root and its dependencies relative to itself, so no paths are hardcoded:
 
 ```sh
-lua/orchlaunch/tests/run.sh
+tests/run.sh
 ```
+
+Dependencies are looked up in `stdpath("data")/lazy` (and the other standard
+plugin locations); point `ORCHLAUNCH_DEPS` at a directory containing them
+(`nui.nvim`, `nui-components.nvim`, `toml.nvim`) to override.
 
 ## License
 
