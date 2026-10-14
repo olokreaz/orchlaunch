@@ -205,13 +205,13 @@ function M.open(existing, on_saved, opts)
         kinds[field.id] = field.kind
     end
 
-    -- The profile name lives in the frame's border label; a signal drives the
-    -- live summary paragraph.
-    local summary = n.create_signal({ text = "" })
-
     local function title_label(name)
-        return (" CMake profile: %s "):format(name ~= "" and name or "new")
+        return ("  CMake profile: %s"):format(name ~= "" and name or "new")
     end
+
+    -- A signal drives the live title line; another drives the summary paragraph.
+    local title = n.create_signal({ text = title_label(existing.name or "") })
+    local summary = n.create_signal({ text = "" })
 
     -- Forward declarations (assigned once the renderer exists).
     local refresh_summary
@@ -223,7 +223,7 @@ function M.open(existing, on_saved, opts)
         if is_closed() then
             return
         end
-        UI.set_frame_label(renderer, title_label(name))
+        title.text = title_label(name)
     end
 
     local function refresh_title()
@@ -496,9 +496,10 @@ function M.open(existing, on_saved, opts)
         return n.rows(
             { flex = 1, direction = "column" },
             n.gap(1),
+            n.paragraph({ id = "title", lines = title.text }),
             n.paragraph({ id = "summary", lines = summary.text }),
             n.gap(1),
-            n.columns({ size = math.max(10, win_height - 8) }, cell(left), n.gap(3), cell(right)),
+            n.columns({ size = math.max(10, win_height - 6) }, cell(left), n.gap(3), cell(right)),
             n.gap(1),
             footer()
         )
@@ -513,6 +514,7 @@ function M.open(existing, on_saved, opts)
         return n.rows(
             { flex = 1, direction = "column" },
             n.gap(1),
+            n.paragraph({ id = "title", lines = title.text }),
             n.paragraph({ id = "preset", lines = table.concat(preset_lines(state, existing), "\n") }),
             n.gap(1),
             input("environment", " Environment (KEY=VALUE, one per line) ", environment, { size = 4 }),
@@ -536,7 +538,6 @@ function M.open(existing, on_saved, opts)
     renderer = UI.renderer({
         width = math.max(80, math.min(vim.o.columns - 4, 112)),
         height = win_height,
-        frame_label = title_label(existing.name or ""),
         on_mount = function()
             local component = renderer:get_component_by_id("name")
                 or renderer:get_component_by_id("environment")

@@ -14,27 +14,17 @@ function M.notify(message, level)
 end
 
 --- Creates a centered renderer with a frame around the whole layout.
----@param opts? { width?: integer, height?: integer, position?: string|number, relative?: string, keymap?: table, on_mount?: function, on_unmount?: function, frame?: boolean, frame_label?: string }
+---@param opts? { width?: integer, height?: integer, position?: string|number, relative?: string, keymap?: table, on_mount?: function, on_unmount?: function, frame?: boolean }
 ---@return table
 function M.renderer(opts)
     opts = opts or {}
 
-    local user_on_mount = opts.on_mount
-    local renderer
-
-    renderer = M.n().create_renderer({
+    local renderer = M.n().create_renderer({
         width = opts.width or 90,
         height = opts.height or 34,
         position = opts.position or "50%",
         relative = opts.relative or "editor",
-        on_mount = function()
-            if opts.frame ~= false then
-                M.frame(renderer, { label = opts.frame_label })
-            end
-            if user_on_mount then
-                user_on_mount()
-            end
-        end,
+        on_mount = opts.on_mount,
         on_unmount = opts.on_unmount,
         keymap = vim.tbl_extend("force", {
             close = "<Esc>",
@@ -43,57 +33,43 @@ function M.renderer(opts)
         }, opts.keymap or {}),
     })
 
+    if opts.frame ~= false then
+        -- The layout container only exists after `render`, and its window opens on
+        -- the next tick; dressing it here lands on the window config before mount.
+        local base_render = renderer.render
+        renderer.render = function(self, content)
+            base_render(self, content)
+            M.frame(self)
+        end
+    end
+
     return renderer
 end
 
---- Draws a frame (border) around a renderer's whole layout.
+--- Glyphs for the rounded frame (Neovim ignores the `style`-table border form
+--- on this window, so the explicit list is used).
+local FRAME_BORDER = { "╭", "─", "╮", "│", "╯", "─", "╰", "│" }
+
+--- Draws a frame (border + solid panel) around a renderer's whole layout.
 ---
 --- `nui-components` layout containers (rows/columns/box/form) have no window of
---- their own, so a border set on them is never drawn. The renderer's underlying
---- `nui.layout` does own a container window, so we dress that one up instead.
+--- their own; the renderer's underlying `nui.layout` does own a container window,
+--- so we give that one a border and an opaque background. Child windows sit on a
+--- higher z-index, so they render on top of the panel.
 ---@param renderer table
----@param opts? { label?: string }
 ---@return table? layout
-function M.frame(renderer, opts)
-    opts = opts or {}
-
+function M.frame(renderer)
     local layout = renderer and renderer.layout
     local float = layout and layout._ and layout._.float
     if not float then
         return nil
     end
 
-    local border = {
-        style = "rounded",
-        text = { top = opts.label or "", top_align = "left" },
-    }
-
-    float.win_config.border = border
-    float.win_options.winblend = opts.winblend or 0
-
-    if layout.winid and vim.api.nvim_win_is_valid(layout.winid) then
-        pcall(vim.api.nvim_win_set_config, layout.winid, { border = border })
-        pcall(vim.api.nvim_set_option_value, "winblend", opts.winblend or 0, { win = layout.winid })
-    end
+    float.win_config.border = FRAME_BORDER
+    float.win_config.style = "minimal"
+    float.win_options.winblend = 0
 
     return layout
-end
-
---- Updates the top label of a frame previously drawn by `M.frame`.
----@param renderer table
----@param label string
-function M.set_frame_label(renderer, label)
-    local layout = renderer and renderer.layout
-    if not (layout and layout.winid and vim.api.nvim_win_is_valid(layout.winid)) then
-        return
-    end
-
-    pcall(vim.api.nvim_win_set_config, layout.winid, {
-        border = {
-            style = "rounded",
-            text = { top = label, top_align = "left" },
-        },
-    })
 end
 
 --- Reads the current value of a component by id.
