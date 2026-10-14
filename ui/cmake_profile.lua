@@ -171,7 +171,7 @@ function M.open(existing, on_saved, opts)
 
     -- The form is taller than it is wide; size the float to the terminal while
     -- keeping it usable on short screens.
-    local win_height = math.max(14, math.min(vim.o.lines - 4, readonly and 18 or 30))
+    local win_height = math.max(14, math.min(vim.o.lines - 4, readonly and 20 or 30))
 
     local renderer
 
@@ -205,9 +205,13 @@ function M.open(existing, on_saved, opts)
         kinds[field.id] = field.kind
     end
 
-    -- Reactive signals power the live title and summary paragraphs.
-    local title = n.create_signal({ text = "" })
+    -- The profile name lives in the frame's border label; a signal drives the
+    -- live summary paragraph.
     local summary = n.create_signal({ text = "" })
+
+    local function title_label(name)
+        return (" CMake profile: %s "):format(name ~= "" and name or "new")
+    end
 
     -- Forward declarations (assigned once the renderer exists).
     local refresh_summary
@@ -219,7 +223,7 @@ function M.open(existing, on_saved, opts)
         if is_closed() then
             return
         end
-        title.text = (" CMake profile: %s "):format(name ~= "" and name or "new")
+        UI.set_frame_label(renderer, title_label(name))
     end
 
     local function refresh_title()
@@ -491,10 +495,10 @@ function M.open(existing, on_saved, opts)
 
         return n.rows(
             { flex = 1, direction = "column" },
-            n.paragraph({ id = "title", lines = title.text }),
+            n.gap(1),
             n.paragraph({ id = "summary", lines = summary.text }),
             n.gap(1),
-            n.columns({ size = math.max(10, win_height - 6) }, cell(left), n.gap(3), cell(right)),
+            n.columns({ size = math.max(10, win_height - 8) }, cell(left), n.gap(3), cell(right)),
             n.gap(1),
             footer()
         )
@@ -508,7 +512,6 @@ function M.open(existing, on_saved, opts)
 
         return n.rows(
             { flex = 1, direction = "column" },
-            n.paragraph({ id = "title", lines = title.text }),
             n.gap(1),
             n.paragraph({ id = "preset", lines = table.concat(preset_lines(state, existing), "\n") }),
             n.gap(1),
@@ -531,10 +534,12 @@ function M.open(existing, on_saved, opts)
     -- ============================================================================
 
     renderer = UI.renderer({
-        width = math.max(80, math.min(vim.o.columns - 4, 116)),
+        width = math.max(80, math.min(vim.o.columns - 4, 112)),
         height = win_height,
+        frame_label = title_label(existing.name or ""),
         on_mount = function()
             local component = renderer:get_component_by_id("name")
+                or renderer:get_component_by_id("environment")
             if component then
                 renderer.winid = component.winid
                 renderer.bufnr = component.bufnr
@@ -547,7 +552,6 @@ function M.open(existing, on_saved, opts)
         end,
     })
 
-    set_title(existing.name or "")
     renderer:render(readonly and imported_body() or manual_body())
 
     -- Route the editor's own close keys through `close()` so `on_saved` fires.

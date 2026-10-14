@@ -13,24 +13,86 @@ function M.notify(message, level)
     vim.notify("[orchlaunch] " .. message, level or vim.log.levels.INFO)
 end
 
---- Creates a centered renderer with the standard keymap.
----@param opts? { width?: integer, height?: integer, position?: string|number, relative?: string, keymap?: table, on_mount?: function, on_unmount?: function }
+--- Creates a centered renderer with a frame around the whole layout.
+---@param opts? { width?: integer, height?: integer, position?: string|number, relative?: string, keymap?: table, on_mount?: function, on_unmount?: function, frame?: boolean, frame_label?: string }
 ---@return table
 function M.renderer(opts)
     opts = opts or {}
 
-    return M.n().create_renderer({
+    local user_on_mount = opts.on_mount
+    local renderer
+
+    renderer = M.n().create_renderer({
         width = opts.width or 90,
         height = opts.height or 34,
         position = opts.position or "50%",
         relative = opts.relative or "editor",
-        on_mount = opts.on_mount,
+        on_mount = function()
+            if opts.frame ~= false then
+                M.frame(renderer, { label = opts.frame_label })
+            end
+            if user_on_mount then
+                user_on_mount()
+            end
+        end,
         on_unmount = opts.on_unmount,
         keymap = vim.tbl_extend("force", {
             close = "<Esc>",
             focus_next = "<Tab>",
             focus_prev = "<S-Tab>",
         }, opts.keymap or {}),
+    })
+
+    return renderer
+end
+
+--- Draws a frame (border) around a renderer's whole layout.
+---
+--- `nui-components` layout containers (rows/columns/box/form) have no window of
+--- their own, so a border set on them is never drawn. The renderer's underlying
+--- `nui.layout` does own a container window, so we dress that one up instead.
+---@param renderer table
+---@param opts? { label?: string }
+---@return table? layout
+function M.frame(renderer, opts)
+    opts = opts or {}
+
+    local layout = renderer and renderer.layout
+    local float = layout and layout._ and layout._.float
+    if not float then
+        return nil
+    end
+
+    local border = {
+        style = "rounded",
+        text = { top = opts.label or "", top_align = "left" },
+    }
+
+    float.win_config.border = border
+    float.win_options.winblend = opts.winblend or 0
+
+    if layout.winid and vim.api.nvim_win_is_valid(layout.winid) then
+        pcall(vim.api.nvim_win_set_config, layout.winid, { border = border })
+        pcall(vim.api.nvim_set_option_value, "winblend", opts.winblend or 0, { win = layout.winid })
+    end
+
+    return layout
+end
+
+--- Updates the top label of a frame previously drawn by `M.frame`.
+---@param renderer table
+---@param label string
+function M.set_frame_label(renderer, label)
+    local layout = renderer and renderer.layout
+    if not (layout and layout.winid and vim.api.nvim_win_is_valid(layout.winid)) then
+        return
+    end
+
+    pcall(vim.api.nvim_win_set_config, layout.winid, {
+        border = {
+            style = "rounded",
+            text = { top = label, top_align = "left" },
+        },
     })
 end
 
