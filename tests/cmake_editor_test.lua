@@ -51,6 +51,7 @@ f:close()
 
 local editor = require("orchlaunch.ui.editor")
 local state = require("orchlaunch.state")
+local UI = require("orchlaunch.ui")
 require("orchlaunch").create_project(root)
 state.add_toolchain({ name = "Clang", c = "clang", cxx = "clang++" })
 state.save()
@@ -91,30 +92,20 @@ check("activate toggles boolean", popup.orch.values.enabled ~= before_toggle)
 popup.orch.activate(popup.orch.fields[enabled_index])
 check("activate toggles back", popup.orch.values.enabled == before_toggle)
 
--- string sub-editor wiring
-local sw = popup.orch.activate(popup.orch.fields[popup.orch.index_of("build_dir")])
+-- string field wiring
+popup.orch.set("build_dir", "build/ninja")
 vim.wait(50)
-check("string sub-editor is a prompt", sw ~= nil and vim.bo[sw.bufnr].buftype == "prompt")
-sw.orch_apply("build/ninja")
-vim.wait(50)
-check("string sub-editor applied", popup.orch.values.build_dir == "build/ninja", tostring(popup.orch.values.build_dir))
+check("string field applied", popup.orch.values.build_dir == "build/ninja", tostring(popup.orch.values.build_dir))
 
--- select sub-editor wiring
-local sm = popup.orch.activate(popup.orch.fields[popup.orch.index_of("build_type")])
+-- select field wiring
+popup.orch.set("build_type", "Release")
 vim.wait(50)
-check("select sub-editor mounted", sm ~= nil and sm.bufnr ~= nil)
-sm.orch_apply("Release")
-vim.wait(50)
-check("select sub-editor applied", popup.orch.values.build_type == "Release", tostring(popup.orch.values.build_type))
+check("select field applied", popup.orch.values.build_type == "Release", tostring(popup.orch.values.build_type))
 
--- multiline sub-editor wiring
-local mb = popup.orch.activate(popup.orch.fields[popup.orch.index_of("build_args")])
+-- multiline field wiring
+popup.orch.set("build_args", "-j4\n --verbose \n")
 vim.wait(50)
-check("multiline sub-editor mounted", mb ~= nil and mb.bufnr ~= nil)
-vim.api.nvim_buf_set_lines(mb.bufnr, 0, -1, false, { "-j4", " --verbose ", "" })
-mb.orch_apply()
-vim.wait(50)
-check("multiline sub-editor applied", popup.orch.values.build_args[1] == "-j4" and popup.orch.values.build_args[2] == "--verbose", vim.inspect(popup.orch.values.build_args))
+check("multiline field applied", UI.lines(popup.orch.values.build_args)[1] == "-j4" and UI.lines(popup.orch.values.build_args)[2] == "--verbose", vim.inspect(popup.orch.values.build_args))
 
 popup.orch.set("name", "Debug")
 popup.orch.set("toolchain", "Clang")
@@ -122,9 +113,9 @@ popup.orch.set("generator", "Ninja")
 popup.orch.set("build_type", "Debug")
 popup.orch.set("build_dir", "build/custom")
 popup.orch.set("install_dir", "${workspace}/out")
-popup.orch.set("configure_args", { "-DFOO=1", "-DBAR=2" })
-popup.orch.set("definitions", { CMAKE_CXX_FLAGS = "-O2" })
-popup.orch.set("environment", { CC = "clang" })
+popup.orch.set("configure_args", "-DFOO=1\n-DBAR=2")
+popup.orch.set("definitions", "CMAKE_CXX_FLAGS=-O2")
+popup.orch.set("environment", "CC=clang")
 popup.orch.save()
 vim.wait(100)
 

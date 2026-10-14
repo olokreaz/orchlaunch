@@ -115,6 +115,7 @@ popup.orch.save()
 eq(#notifications > count, true, "preset profile save rejected")
 
 popup.orch.close(false)
+vim.wait(50)
 eq(closed, true, "preset profile close callback fired")
 
 state.reload()

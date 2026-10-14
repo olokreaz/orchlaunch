@@ -1,23 +1,19 @@
--- OrchLaunch — CMake profile editor built on raw nui.nvim.
+-- OrchLaunch — CMake profile editor built on `nui-components`.
 --
--- A manual profile is self-contained: name, toolchain, generator, build type,
--- directories, args, definitions and environment. It never references presets.
+-- Manual profiles own every build setting; a new profile starts from sane
+-- defaults (generator = Ninja, build type = Debug). Nothing preset-related is
+-- exposed here.
 --
--- Profiles carrying a `kind` are imported from CMakePresets.json /
--- CMakeUserPresets.json (and any included files). They cannot be created or
--- edited here — only viewed. Manage them in the preset JSON files and re-import
--- through the profile list.
-
-local Popup = require("nui.popup")
-local Input = require("nui.input")
-local Menu = require("nui.menu")
-local event = require("nui.utils.autocmd").event
+-- Preset-derived profiles (those with `kind`) are imported from
+-- CMakePresets.json / CMakeUserPresets.json and any included files. They are
+-- read-only: manage them in the JSON files and re-import through the list.
 
 local UI = require("orchlaunch.ui")
 
-local M = {}
+local ERROR = vim.log.levels.ERROR
+local WARN = vim.log.levels.WARN
 
-local NS = vim.api.nvim_create_namespace("orchlaunch_cmake_profile")
+local M = {}
 
 --- Common CMake generators offered in the generator select.
 local GENERATORS = {
@@ -35,48 +31,151 @@ local GENERATORS = {
 
 local BUILD_TYPES = { "Debug", "Release", "RelWithDebInfo", "MinSizeRel" }
 
-local function ensure_highlights()
-    vim.api.nvim_set_hl(0, "OrchLaunchLabel", { link = "Title", default = true })
-    vim.api.nvim_set_hl(0, "OrchLaunchValue", { link = "Normal", default = true })
-    vim.api.nvim_set_hl(0, "OrchLaunchHint", { link = "Comment", default = true })
-    vim.api.nvim_set_hl(0, "OrchLaunchBorder", { link = "FloatBorder", default = true })
-    vim.api.nvim_set_hl(0, "OrchLaunchCursorLine", { link = "Visual", default = true })
-end
+--- Preset references preserved on legacy profiles but hidden from the editor.
+local PRESERVED_KEYS = {
+    "kind",
+    "configure_preset",
+    "build_preset",
+    "test_preset",
+    "package_preset",
+    "workflow_preset",
+}
+
+-- ============================================================================
+-- Option lists
+-- ============================================================================
 
 --- @param state table
---- @return string[]
-local function toolchain_names(state)
-    local names = {}
+--- @return { id: string, text: string }[]
+local function toolchain_items(state)
+    local items = { { id = "", text = "(none)" } }
     for _, toolchain in ipairs(state.toolchains()) do
-        names[#names + 1] = toolchain.name
+        items[#items + 1] = { id = toolchain.name, text = toolchain.name }
     end
-    return names
+    return items
 end
 
---- Editable (manual) profile fields — nothing preset-related.
+--- @param current? string
+--- @return { id: string, text: string }[]
+local function generator_items(current)
+    local items = {}
+    local seen = {}
+
+    if current and current ~= "" then
+        items[#items + 1] = { id = current, text = current .. "  (current)" }
+        seen[current] = true
+    end
+
+    for _, generator in ipairs(GENERATORS) do
+        if not seen[generator] then
+            items[#items + 1] = { id = generator, text = generator }
+            seen[generator] = true
+        end
+    end
+
+    return items
+end
+
+--- @param current? string
+--- @return { id: string, text: string }[]
+local function build_type_items(current)
+    local items = {}
+
+    if current and current ~= "" and not vim.tbl_contains(BUILD_TYPES, current) then
+        items[#items + 1] = { id = current, text = current .. "  (custom)" }
+    end
+
+    for _, build_type in ipairs(BUILD_TYPES) do
+        items[#items + 1] = { id = build_type, text = build_type }
+    end
+
+    return items
+end
+
+--- @param value? string
+--- @return string?
+local function trimmed(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+    value = vim.trim(value)
+    return value ~= "" and value or nil
+end
+
+-- ============================================================================
+-- Read-only preset description
+-- ============================================================================
+
 --- @param state table
---- @return table[]
-local function manual_fields(state)
-    return {
-        { id = "name", label = "Name", kind = "string" },
-        { id = "enabled", label = "Enabled", kind = "bool" },
-        { id = "toolchain", label = "Toolchain", kind = "select", options = toolchain_names(state) },
-        { id = "generator", label = "Generator", kind = "select", options = GENERATORS },
-        { id = "build_type", label = "Build type", kind = "select", options = BUILD_TYPES },
-        { id = "build_dir", label = "Build dir", kind = "string" },
-        { id = "install_dir", label = "Install dir", kind = "string" },
-        { id = "configure_args", label = "Configure args", kind = "lines" },
-        { id = "build_args", label = "Build args", kind = "lines" },
-        { id = "install_args", label = "Install args", kind = "lines" },
-        { id = "definitions", label = "Definitions", kind = "env" },
-        { id = "environment", label = "Environment", kind = "env" },
-    }
+--- @param profile table
+--- @return string[]
+local function preset_lines(state, profile)
+    local presets = require("orchlaunch.presets")
+    local discovered = state.presets()
+    local out = {}
+
+    out[#out + 1] = ("  Imported from a %s preset."):format(profile.kind)
+
+    if profile.kind == "configure" and profile.configure_preset then
+        out[#out + 1] = ("  configurePreset = %s"):format(profile.configure_preset)
+        local resolved = discovered and presets.resolve(discovered, "configure", profile.configure_preset)
+        if resolved then
+            if resolved.generator then
+                out[#out + 1] = "    generator   = " .. tostring(resolved.generator)
+            end
+            if resolved.binaryDir then
+                out[#out + 1] = "    binaryDir   = " .. tostring(resolved.binaryDir)
+            end
+            local cache = resolved.cacheVariables or {}
+            if cache.CMAKE_BUILD_TYPE then
+                out[#out + 1] = "    build type  = " .. tostring(cache.CMAKE_BUILD_TYPE)
+            end
+        end
+    elseif profile.kind == "build" and profile.build_preset then
+        out[#out + 1] = ("  buildPreset = %s"):format(profile.build_preset)
+        if profile.configure_preset then
+            out[#out + 1] = ("  configurePreset = %s"):format(profile.configure_preset)
+        end
+        local resolved = discovered and presets.resolve(discovered, "build", profile.build_preset)
+        if resolved and resolved.configuration then
+            out[#out + 1] = "    configuration = " .. tostring(resolved.configuration)
+        end
+    end
+
+    out[#out + 1] = ""
+    out[#out + 1] = "  Generator, directories, compiler and cache variables come from"
+    out[#out + 1] = "  the preset. Edit the preset file and re-import to change them."
+    out[#out + 1] = "  Only the environment can be adjusted per project."
+
+    return out
 end
 
---- Read-only fields for a preset-derived ("imported") profile.
---- @return table[]
-local function imported_fields()
-    return {
+-- ============================================================================
+-- Editor
+-- ============================================================================
+
+--- Opens the CMake profile editor.
+--- @param existing? OrchCMakeProfile
+--- @param on_saved? function
+--- @param opts? table
+--- @return table renderer
+function M.open(existing, on_saved, opts)
+    opts = opts or {}
+
+    local n = UI.n()
+    local state = require("orchlaunch.state")
+
+    existing = existing or {}
+    local readonly = existing.kind ~= nil
+    local original_name = existing.name
+
+    -- The form is taller than it is wide; size the float to the terminal while
+    -- keeping it usable on short screens.
+    local win_height = math.max(14, math.min(vim.o.lines - 4, readonly and 18 or 30))
+
+    local renderer
+
+    local fields = readonly and {
         { id = "name", label = "Name", kind = "string", readonly = true },
         { id = "enabled", label = "Enabled", kind = "bool", readonly = true },
         { id = "kind", label = "Imported from", kind = "string", readonly = true },
@@ -86,537 +185,407 @@ local function imported_fields()
         { id = "package_preset", label = "Package preset", kind = "string", readonly = true },
         { id = "workflow_preset", label = "Workflow preset", kind = "string", readonly = true },
         { id = "environment", label = "Environment", kind = "env", readonly = true },
-    }
-end
-
---- @param profile? table
---- @return table
-local function snapshot(profile)
-    if profile == nil then
-        return {
-            name = "",
-            enabled = true,
-            generator = "Ninja",
-            build_type = "Debug",
-            configure_args = {},
-            build_args = {},
-            install_args = {},
-            definitions = {},
-            environment = {},
-        }
-    end
-
-    return {
-        name = profile.name or "",
-        enabled = profile.enabled ~= false,
-        kind = profile.kind,
-        toolchain = profile.toolchain,
-        generator = profile.generator,
-        build_type = profile.build_type,
-        build_dir = profile.build_dir,
-        install_dir = profile.install_dir,
-        configure_args = vim.deepcopy(profile.configure_args or {}),
-        build_args = vim.deepcopy(profile.build_args or {}),
-        install_args = vim.deepcopy(profile.install_args or {}),
-        definitions = vim.deepcopy(profile.definitions or {}),
-        environment = vim.deepcopy(profile.environment or {}),
-    }
-end
-
---- @param field table
---- @param values table
---- @return string text, boolean placeholder
-local function format_value(field, values)
-    local value = values[field.id]
-
-    if field.kind == "bool" then
-        return value and "[x]" or "[ ]", false
-    end
-
-    if field.kind == "lines" then
-        local count = #(value or {})
-        if count == 0 then
-            return "(empty)", true
-        end
-        return ("%d item(s)"):format(count), false
-    end
-
-    if field.kind == "env" then
-        local count = 0
-        for _ in pairs(value or {}) do
-            count = count + 1
-        end
-        if count == 0 then
-            return "(empty)", true
-        end
-        return ("%d entr%s"):format(count, count == 1 and "y" or "ies"), false
-    end
-
-    if value == nil or value == "" then
-        return "(unset)", true
-    end
-
-    return tostring(value), false
-end
-
---- @param values table
---- @param original? table
---- @return table
-local function to_profile(values, original)
-    local function trimmed(value)
-        return type(value) == "string" and vim.trim(value) or value
-    end
-
-    local profile = {
-        name = trimmed(values.name),
-        enabled = values.enabled and true or false,
+    } or {
+        { id = "name", label = "Name", kind = "string" },
+        { id = "enabled", label = "Enabled", kind = "bool" },
+        { id = "toolchain", label = "Toolchain", kind = "select" },
+        { id = "generator", label = "Generator", kind = "select" },
+        { id = "build_type", label = "Build type", kind = "select" },
+        { id = "build_dir", label = "Build dir", kind = "string" },
+        { id = "install_dir", label = "Install dir", kind = "string" },
+        { id = "configure_args", label = "Configure args", kind = "lines" },
+        { id = "build_args", label = "Build args", kind = "lines" },
+        { id = "install_args", label = "Install args", kind = "lines" },
+        { id = "definitions", label = "Definitions", kind = "env" },
+        { id = "environment", label = "Environment", kind = "env" },
     }
 
-    for _, key in ipairs({
-        "toolchain",
-        "generator",
-        "build_type",
-        "build_dir",
-        "install_dir",
-    }) do
-        local value = trimmed(values[key])
-        if type(value) == "string" and value ~= "" then
-            profile[key] = value
+    local kinds = {}
+    for _, field in ipairs(fields) do
+        kinds[field.id] = field.kind
+    end
+
+    -- Reactive signals power the live title and summary paragraphs.
+    local title = n.create_signal({ text = "" })
+    local summary = n.create_signal({ text = "" })
+
+    -- Forward declarations (assigned once the renderer exists).
+    local refresh_summary
+    local is_closed = function()
+        return false
+    end
+
+    local function set_title(name)
+        if is_closed() then
+            return
+        end
+        title.text = (" CMake profile: %s "):format(name ~= "" and name or "new")
+    end
+
+    local function refresh_title()
+        local value = renderer and renderer:get_component_by_id("name")
+        if value then
+            set_title(value:get_current_value() or "")
         end
     end
 
-    for _, key in ipairs({ "configure_args", "build_args", "install_args" }) do
-        local value = values[key]
-        if value and #value > 0 then
-            profile[key] = value
-        end
+    -- ============================================================================
+    -- Component helpers
+    -- ============================================================================
+
+    local function cell(component)
+        return n.rows({ flex = 1, direction = "column" }, component)
     end
 
-    for _, key in ipairs({ "definitions", "environment" }) do
-        local value = values[key]
-        if value and next(value) then
-            profile[key] = value
-        end
+    local function input(id, label, value, extra)
+        extra = extra or {}
+        return n.text_input({
+            id = id,
+            border_label = label,
+            border_style = "rounded",
+            value = value or "",
+            size = extra.size or 1,
+            placeholder = extra.placeholder,
+            autofocus = extra.autofocus,
+            on_change = extra.on_change or function() end,
+        })
     end
 
-    -- Preserve preset references on legacy profiles without exposing them.
-    if original then
-        for _, key in ipairs({
-            "kind",
-            "configure_preset",
-            "build_preset",
-            "test_preset",
-            "package_preset",
-            "workflow_preset",
-        }) do
-            if original[key] ~= nil then
-                profile[key] = original[key]
-            end
-        end
+    local function check(id, label, value, on_change)
+        return n.checkbox({
+            id = id,
+            label = label,
+            value = value == true,
+            on_change = on_change or function() end,
+        })
     end
 
-    return profile
-end
+    local function select(id, label, items, value)
+        local nodes = {}
+        for _, item in ipairs(items) do
+            nodes[#nodes + 1] = n.option(item.text, { id = item.id })
+        end
 
---- @param existing? table
---- @param on_saved? function
---- @param opts? table
---- @return table popup
-function M.open(existing, on_saved, opts)
-    opts = opts or {}
-    ensure_highlights()
+        return n.select({
+            id = id,
+            data = nodes,
+            selected = { id = value or "" },
+            size = math.min(math.max(1, #items), 2),
+            border_label = label,
+            border_style = "rounded",
+            on_select = function()
+                vim.schedule(refresh_summary)
+            end,
+        })
+    end
 
-    local state = require("orchlaunch.state")
-    local readonly = existing ~= nil and existing.kind ~= nil
-    local original_name = existing and existing.name or nil
-    local fields = readonly and imported_fields() or manual_fields(state)
-    local values = snapshot(existing)
+    local function heading(title_text)
+        return n.paragraph({ lines = n.line(n.text(" " .. title_text, "Title")) })
+    end
 
-    local selected = 1
+    -- ============================================================================
+    -- Value reads
+    -- ============================================================================
+
+    local function read_field(id)
+        local kind = kinds[id]
+        local component = renderer and renderer:get_component_by_id(id)
+
+        if not component then
+            return existing[id]
+        end
+
+        local value = component:get_current_value()
+
+        if kind == "bool" then
+            return value == true
+        end
+        if kind == "select" then
+            return type(value) == "table" and value.id or value
+        end
+        return value
+    end
+
+    local function field_meta()
+        local out = {}
+        for _, field in ipairs(fields) do
+            out[#out + 1] = { id = field.id, kind = field.kind, label = field.label, readonly = field.readonly }
+        end
+        return out
+    end
+
+    -- ============================================================================
+    -- Persistence
+    -- ============================================================================
+
     local closed = false
 
-    local width = math.max(56, math.min(100, math.floor(vim.o.columns * 0.62)))
-
-    local popup = Popup({
-        relative = opts.relative or "editor",
-        position = opts.position or "50%",
-        size = { width = width, height = #fields + 2 },
-        border = {
-            style = "rounded",
-            text = {
-                top = " CMake profile ",
-                top_align = "center",
-                bottom = readonly and " imported from CMakePresets.json · q close "
-                    or " <CR> edit · <Space> toggle · j/k move · <C-s> save · q close ",
-                bottom_align = "center",
-            },
-        },
-        win_options = {
-            cursorline = true,
-            wrap = false,
-            number = false,
-            signcolumn = "no",
-            winhighlight = "FloatBorder:OrchLaunchBorder,CursorLine:OrchLaunchCursorLine",
-        },
-        buf_options = { modifiable = false, bufhidden = "wipe" },
-    })
-
-    local function focus()
-        if vim.api.nvim_win_is_valid(popup.winid) then
-            vim.api.nvim_set_current_win(popup.winid)
-        end
+    is_closed = function()
+        return closed
     end
 
-    local function render()
-        -- Inner width of the popup (borders sit outside the window).
-        local inner = width
-        local spans = {}
-        local lines = {}
-
-        for index, field in ipairs(fields) do
-            local raw, placeholder = format_value(field, values)
-            local value = raw
-
-            -- "  Label ······················ value "
-            local left = "  " .. field.label
-            local left_width = vim.api.nvim_strwidth(left)
-            local max_value = inner - left_width - 3
-            if vim.api.nvim_strwidth(value) > max_value and max_value >= 1 then
-                value = vim.fn.strcharpart(value, 0, math.max(1, max_value - 1)) .. "…"
-            end
-
-            local value_width = vim.api.nvim_strwidth(value)
-            local fill = math.max(1, inner - left_width - value_width - 2)
-            local leader = string.rep(" ", fill)
-            lines[index] = left .. leader .. " " .. value .. " "
-
-            local left_bytes = #left
-            local leader_bytes = #leader
-            spans[index] = {
-                label_start = 2,
-                label_end = 2 + #field.label,
-                value_start = left_bytes + leader_bytes + 1,
-                value_end = left_bytes + leader_bytes + 1 + #value,
-                placeholder = placeholder,
-            }
-        end
-
-        selected = math.max(1, math.min(selected, #fields))
-
-        vim.bo[popup.bufnr].modifiable = true
-        vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, lines)
-        vim.api.nvim_buf_clear_namespace(popup.bufnr, NS, 0, -1)
-
-        for index = 1, #fields do
-            local span = spans[index]
-            vim.api.nvim_buf_add_highlight(popup.bufnr, NS, "OrchLaunchLabel", index - 1, span.label_start, span.label_end)
-            vim.api.nvim_buf_add_highlight(
-                popup.bufnr,
-                NS,
-                span.placeholder and "OrchLaunchHint" or "OrchLaunchValue",
-                index - 1,
-                span.value_start,
-                span.value_end
-            )
-        end
-
-        vim.bo[popup.bufnr].modifiable = false
-
-        if vim.api.nvim_win_is_valid(popup.winid) then
-            vim.api.nvim_win_set_cursor(popup.winid, { selected, 0 })
-        end
-
-        local title = vim.trim(values.name)
-        popup.border:set_text("top", (" CMake profile: %s "):format(title ~= "" and title or "new"), "center")
-    end
-
-    local function set_field(field, value)
-        values[field.id] = value
-        render()
-        focus()
-    end
-
-    local function edit_string(field)
-        local value = values[field.id] or ""
-        local input = Input({
-            relative = "editor",
-            position = "50%",
-            size = { width = math.min(84, math.max(40, vim.api.nvim_strwidth(value) + 16)) },
-            border = {
-                style = "rounded",
-                text = { top = (" %s "):format(field.label), top_align = "center" },
-            },
-            win_options = { winhighlight = "FloatBorder:OrchLaunchBorder,NormalFloat:Normal" },
-        }, {
-            prompt = "> ",
-            default_value = value,
-            on_submit = function(text)
-                set_field(field, text)
-            end,
-            on_close = function()
-                vim.schedule(focus)
-            end,
-        })
-
-        input:map("n", "<Esc>", function()
-            input:unmount()
-        end, { nowait = true })
-
-        input.orch_apply = function(text)
-            input:unmount()
-            set_field(field, text)
-        end
-
-        input:mount()
-        return input
-    end
-
-    local function edit_select(field)
-        local options = vim.deepcopy(field.options or {})
-        local current = values[field.id]
-        if current and current ~= "" and not vim.tbl_contains(options, current) then
-            options[#options + 1] = current
-        end
-
-        local lines = { Menu.item("(none)", { id = "" }) }
-        for _, name in ipairs(options) do
-            lines[#lines + 1] = Menu.item(name, { id = name })
-        end
-
-        local function choose(id)
-            set_field(field, id ~= "" and id or nil)
-        end
-
-        local menu = Menu({
-            relative = "editor",
-            position = "50%",
-            size = { width = math.min(60, math.max(30, width - 12)) },
-            border = {
-                style = "rounded",
-                text = { top = (" %s "):format(field.label), top_align = "center" },
-            },
-            win_options = { winhighlight = "FloatBorder:OrchLaunchBorder,NormalFloat:Normal,CursorLine:OrchLaunchCursorLine" },
-        }, {
-            lines = lines,
-            max_width = math.max(30, width - 12),
-            max_height = 12,
-            keymap = {
-                close = { "<Esc>", "<C-c>", "q" },
-                submit = { "<CR>" },
-            },
-            on_submit = function(item)
-                choose(item.id)
-            end,
-            on_close = function()
-                vim.schedule(focus)
-            end,
-        })
-
-        menu.orch_apply = function(id)
-            menu:unmount()
-            choose(id)
-        end
-
-        menu:mount()
-        return menu
-    end
-
-    local function edit_multiline(field)
-        local initial
-        if field.kind == "env" then
-            initial = UI.format_env(values[field.id])
-        else
-            initial = table.concat(values[field.id] or {}, "\n")
-        end
-
-        local box = Popup({
-            relative = "editor",
-            position = "50%",
-            size = { width = math.max(60, width - 6), height = 13 },
-            border = {
-                style = "rounded",
-                text = {
-                    top = (" %s "):format(field.label),
-                    top_align = "center",
-                    bottom = field.kind == "env" and " KEY=VALUE per line · <C-s> apply · <Esc> close "
-                        or " one per line · <C-s> apply · <Esc> close ",
-                    bottom_align = "center",
-                },
-            },
-            win_options = {
-                cursorline = true,
-                wrap = false,
-                winhighlight = "FloatBorder:OrchLaunchBorder,NormalFloat:Normal,CursorLine:OrchLaunchCursorLine",
-            },
-            buf_options = { modifiable = true, bufhidden = "wipe" },
-        })
-
-        local function apply()
-            local text = table.concat(vim.api.nvim_buf_get_lines(box.bufnr, 0, -1, false), "\n")
-            local value
-            if field.kind == "env" then
-                value = UI.parse_env(text)
-            else
-                value = UI.lines(text)
-            end
-            box:unmount()
-            set_field(field, value)
-        end
-
-        box:mount()
-        vim.api.nvim_buf_set_lines(box.bufnr, 0, -1, false, vim.split(initial, "\n", { plain = true }))
-        box:map("n", "<C-s>", apply, { nowait = true })
-        box:map("i", "<C-s>", function()
-            vim.cmd("stopinsert")
-            apply()
-        end, { nowait = true })
-        box:map("n", "<Esc>", function()
-            box:unmount()
-        end, { nowait = true })
-        box:map("n", "q", function()
-            box:unmount()
-        end, { nowait = true })
-        box:on(event.BufWinLeave, function()
-            vim.schedule(focus)
-        end)
-
-        box.orch_apply = apply
-        return box
-    end
-
-    local function activate(field)
-        if not field then
-            return
-        end
-
-        if field.readonly then
-            UI.notify("imported from CMakePresets.json — edit the preset file", vim.log.levels.WARN)
-            return
-        end
-
-        if field.kind == "bool" then
-            values[field.id] = not values[field.id]
-            render()
-            return field
-        elseif field.kind == "select" then
-            return edit_select(field)
-        elseif field.kind == "lines" or field.kind == "env" then
-            return edit_multiline(field)
-        else
-            return edit_string(field)
-        end
-    end
-
-    local function close(saved)
+    local function close()
         if closed then
             return
         end
         closed = true
-        if saved then
-            state.save()
-        end
-        pcall(function()
-            popup:unmount()
+        -- Unmount on the next tick so any pending component repaints (queued via
+        -- `vim.schedule`) run against live buffers before the windows go away.
+        vim.schedule(function()
+            pcall(function()
+                renderer:close()
+            end)
         end)
-        if on_saved then
-            on_saved()
-        end
     end
 
-    local function save()
-        if readonly then
-            UI.notify("imported from CMakePresets.json — nothing to save", vim.log.levels.WARN)
-            return
-        end
-
-        local name = vim.trim(values.name)
+    local function collect()
+        local name = vim.trim(read_field("name") or "")
         if name == "" then
-            UI.notify("a profile name is required", vim.log.levels.ERROR)
-            focus()
-            return
+            error("a profile name is required", 0)
         end
 
         local clash = state.cmake_profile(name)
         if clash and (original_name == nil or clash.name ~= original_name) then
-            UI.notify(("a profile named %q already exists"):format(name), vim.log.levels.ERROR)
-            focus()
+            error(("a profile named %q already exists"):format(name), 0)
+        end
+
+        local profile = {
+            name = name,
+            enabled = read_field("enabled") == true,
+            toolchain = trimmed(read_field("toolchain")),
+            generator = trimmed(read_field("generator")),
+            build_type = trimmed(read_field("build_type")),
+            build_dir = trimmed(read_field("build_dir")),
+            install_dir = trimmed(read_field("install_dir")),
+            configure_args = UI.lines(read_field("configure_args")),
+            build_args = UI.lines(read_field("build_args")),
+            install_args = UI.lines(read_field("install_args")),
+            definitions = UI.parse_env(read_field("definitions")),
+            environment = UI.parse_env(read_field("environment")),
+        }
+
+        for _, key in ipairs(PRESERVED_KEYS) do
+            if existing[key] ~= nil then
+                profile[key] = existing[key]
+            end
+        end
+
+        return profile
+    end
+
+    local function save()
+        if readonly then
+            UI.notify("imported from CMakePresets.json — nothing to save", WARN)
             return
         end
 
-        local profile = to_profile(values, existing)
+        local ok, profile = pcall(collect)
+        if not ok then
+            UI.notify(tostring(profile), ERROR)
+            if renderer then
+                renderer:focus()
+            end
+            return
+        end
+
         if original_name then
             state.update_cmake_profile(original_name, profile)
         else
             state.add_cmake_profile(profile)
         end
-
-        close(true)
+        state.save()
+        close()
     end
 
-    local function move(delta)
-        selected = math.max(1, math.min(selected + delta, #fields))
-        render()
-    end
+    -- ============================================================================
+    -- Reactive summary
+    -- ============================================================================
 
-    popup:map("n", "j", function()
-        move(1)
-    end, { nowait = true })
-    popup:map("n", "<Down>", function()
-        move(1)
-    end, { nowait = true })
-    popup:map("n", "k", function()
-        move(-1)
-    end, { nowait = true })
-    popup:map("n", "<Up>", function()
-        move(-1)
-    end, { nowait = true })
-    popup:map("n", "g", function()
-        selected = 1
-        render()
-    end, { nowait = true })
-    popup:map("n", "G", function()
-        selected = #fields
-        render()
-    end, { nowait = true })
-    popup:map("n", "<CR>", function()
-        activate(fields[selected])
-    end, { nowait = true })
-    popup:map("n", "<Space>", function()
-        local field = fields[selected]
-        if field and field.kind == "bool" and not field.readonly then
-            values[field.id] = not values[field.id]
-            render()
+    local function summary_text()
+        local bits = {}
+
+        local generator = trimmed(read_field("generator"))
+        if generator then
+            bits[#bits + 1] = "generator " .. generator
         end
-    end, { nowait = true })
-    popup:map("n", "<C-s>", save, { nowait = true })
-    popup:map("n", "<Esc>", function()
-        close(false)
-    end, { nowait = true })
-    popup:map("n", "q", function()
-        close(false)
-    end, { nowait = true })
 
-    popup:mount()
-    render()
-    focus()
-    vim.schedule(focus)
+        local build_type = trimmed(read_field("build_type"))
+        if build_type then
+            bits[#bits + 1] = "build type " .. build_type
+        end
 
-    popup.orch = {
-        fields = fields,
-        values = values,
+        local toolchain = trimmed(read_field("toolchain"))
+        if toolchain then
+            bits[#bits + 1] = "toolchain " .. toolchain
+        end
+
+        bits[#bits + 1] = read_field("enabled") == true and "enabled" or "disabled"
+
+        return "  " .. table.concat(bits, "  ·  ")
+    end
+
+    refresh_summary = function()
+        if closed then
+            return
+        end
+        local ok, text = pcall(summary_text)
+        if ok then
+            summary.text = text
+        end
+    end
+
+    -- ============================================================================
+    -- Layout
+    -- ============================================================================
+
+    local function footer()
+        return n.columns(
+            { size = 1 },
+            n.button({ label = " Save ", on_press = save }),
+            n.gap(2),
+            n.button({
+                label = " Cancel ",
+                on_press = function()
+                    close()
+                end,
+            })
+        )
+    end
+
+    local function manual_body()
+        local left = n.rows(
+            { flex = 1, direction = "column" },
+            heading("Profile"),
+            input("name", " Name ", existing.name, {
+                autofocus = true,
+                placeholder = "e.g. Debug",
+                on_change = function(value)
+                    set_title(value)
+                    refresh_summary()
+                end,
+            }),
+            n.gap(1),
+            check("enabled", " Enabled", existing.enabled ~= false, refresh_summary),
+            n.gap(1),
+            heading("Build"),
+            select("generator", " Generator ", generator_items(existing.generator or "Ninja"), existing.generator or "Ninja"),
+            select("build_type", " Build type ", build_type_items(existing.build_type or "Debug"), existing.build_type or "Debug"),
+            input("build_dir", " Build directory ", existing.build_dir, { placeholder = "build" }),
+            input("install_dir", " Install directory ", existing.install_dir, { placeholder = "install" })
+        )
+
+        local right = n.rows(
+            { flex = 1, direction = "column" },
+            heading("Toolchain"),
+            select("toolchain", " Toolchain ", toolchain_items(state), existing.toolchain),
+            n.gap(1),
+            heading("Arguments"),
+            input("configure_args", " Configure args (one per line) ", UI.format_lines(existing.configure_args)),
+            input("build_args", " Build args (one per line) ", UI.format_lines(existing.build_args)),
+            input("install_args", " Install args (one per line) ", UI.format_lines(existing.install_args)),
+            n.gap(1),
+            heading("Variables"),
+            input("definitions", " Definitions (-DKEY=VALUE, one per line) ", UI.format_env(existing.definitions)),
+            input("environment", " Environment (KEY=VALUE, one per line) ", UI.format_env(existing.environment))
+        )
+
+        return n.rows(
+            { flex = 1, direction = "column" },
+            n.paragraph({ id = "title", lines = title.text }),
+            n.paragraph({ id = "summary", lines = summary.text }),
+            n.gap(1),
+            n.columns({ size = math.max(10, win_height - 6) }, cell(left), n.gap(3), cell(right)),
+            n.gap(1),
+            footer()
+        )
+    end
+
+    local function imported_body()
+        local environment = UI.format_env(existing.environment)
+        if environment == "" then
+            environment = "  (empty)"
+        end
+
+        return n.rows(
+            { flex = 1, direction = "column" },
+            n.paragraph({ id = "title", lines = title.text }),
+            n.gap(1),
+            n.paragraph({ id = "preset", lines = table.concat(preset_lines(state, existing), "\n") }),
+            n.gap(1),
+            input("environment", " Environment (KEY=VALUE, one per line) ", environment, { size = 4 }),
+            n.gap(1),
+            n.columns(
+                { size = 1 },
+                n.button({
+                    label = " Close ",
+                    on_press = function()
+                        close()
+                    end,
+                })
+            )
+        )
+    end
+
+    -- ============================================================================
+    -- Renderer
+    -- ============================================================================
+
+    renderer = UI.renderer({
+        width = math.max(80, math.min(vim.o.columns - 4, 116)),
+        height = win_height,
+        on_mount = function()
+            local component = renderer:get_component_by_id("name")
+            if component then
+                renderer.winid = component.winid
+                renderer.bufnr = component.bufnr
+            end
+        end,
+        on_unmount = function()
+            if on_saved then
+                on_saved()
+            end
+        end,
+    })
+
+    set_title(existing.name or "")
+    renderer:render(readonly and imported_body() or manual_body())
+
+    -- Route the editor's own close keys through `close()` so `on_saved` fires.
+    renderer:add_mappings({
+        { mode = { "n" }, key = "<Esc>", handler = close },
+        { mode = { "n" }, key = "q", handler = close },
+    })
+
+    vim.schedule(function()
+        if not readonly then
+            refresh_title()
+            refresh_summary()
+        end
+    end)
+
+    -- ============================================================================
+    -- Scripting hooks (`popup.orch`)
+    -- ============================================================================
+
+    local values = setmetatable({}, {
+        __index = function(_, key)
+            return read_field(key)
+        end,
+    })
+
+    renderer.orch = {
         readonly = readonly,
-        refresh = render,
-        activate = activate,
+        fields = field_meta(),
+        values = values,
+        refresh = function()
+            renderer:redraw()
+        end,
+        focus = function()
+            renderer:focus()
+        end,
         save = save,
         close = close,
-        select = function(index)
-            selected = index
-            render()
-        end,
-        set = function(id, value)
-            values[id] = value
-            render()
-        end,
+        get = read_field,
         index_of = function(id)
             for index, field in ipairs(fields) do
                 if field.id == id then
@@ -624,9 +593,52 @@ function M.open(existing, on_saved, opts)
                 end
             end
         end,
+        set = function(id, value)
+            local kind = kinds[id]
+            local component = renderer:get_component_by_id(id)
+            if not component then
+                return
+            end
+
+            if kind == "bool" then
+                component:set_current_value(value == true)
+            elseif kind == "select" then
+                component:set_current_value({ id = value })
+            else
+                component:set_current_value(value or "")
+                if component.bufnr and vim.api.nvim_buf_is_valid(component.bufnr) then
+                    vim.api.nvim_buf_set_lines(component.bufnr, 0, -1, false, vim.split(value or "", "\n"))
+                end
+            end
+
+            if id == "name" then
+                set_title(value or "")
+            end
+            refresh_summary()
+        end,
+        activate = function(field)
+            if not field then
+                return
+            end
+            if readonly or field.readonly then
+                UI.notify("imported from CMakePresets.json — edit the preset file", WARN)
+                return
+            end
+
+            local component = renderer:get_component_by_id(field.id)
+            if field.kind == "bool" and component then
+                component:set_current_value(not (component:get_current_value() == true))
+                refresh_summary()
+                return
+            end
+            if component then
+                component:focus()
+            end
+            return component
+        end,
     }
 
-    return popup
+    return renderer
 end
 
 return M
