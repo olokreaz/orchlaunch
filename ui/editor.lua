@@ -241,19 +241,17 @@ end
 -- Shared dialog scaffolding
 -- ============================================================================
 
---- Builds the standard footer with Save/Cancel buttons.
+--- Renders the footer hint and binds the save key (no action buttons).
 --- @param n table
 --- @param renderer table
 --- @param save function
 local function footer(n, renderer, save)
-    return n.columns(
-        { size = 1 },
-        n.button({ label = " Save ", on_press = save }),
-        n.gap(2),
-        n.button({ label = " Cancel ", on_press = function()
-            renderer:close()
-        end })
-    )
+    renderer:add_mappings({
+        { mode = { "n", "i" }, key = "<C-s>", handler = save },
+    })
+    renderer._save = save
+
+    return n.paragraph({ align = "center", lines = "  <C-s> save    <Esc> cancel  " })
 end
 
 --- Runs `collect`, persists the project and closes the renderer.

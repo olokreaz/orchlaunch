@@ -94,7 +94,7 @@ Then, in the browser:
 2. **CMake…** — create/select a CMake profile (or **Import** presets).
 3. **Load CMake (m)** — configure and discover CMake targets; native run
    configurations are created for every executable target.
-4. **New (a)** — add a configuration, pick a target, **Save**.
+4. **New (a)** — add a configuration, pick a target, save with `<C-s>`.
 5. **Run (r)** — run the active/selected configuration.
 
 Everything is stored as TOML under `.orch/`, so it can be reviewed and

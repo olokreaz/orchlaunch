@@ -443,17 +443,12 @@ function M.open(existing, on_saved, opts)
     -- ============================================================================
 
     local function footer()
-        return n.columns(
-            { size = 1 },
-            n.button({ label = " Save ", on_press = save }),
-            n.gap(2),
-            n.button({
-                label = " Cancel ",
-                on_press = function()
-                    close()
-                end,
-            })
-        )
+        renderer:add_mappings({
+            { mode = { "n", "i" }, key = "<C-s>", handler = save },
+        })
+        renderer._save = save
+
+        return n.paragraph({ align = "center", lines = "  <C-s> save    <Esc> cancel  " })
     end
 
     local function manual_body()
@@ -519,15 +514,7 @@ function M.open(existing, on_saved, opts)
             n.gap(1),
             input("environment", " Environment (KEY=VALUE, one per line) ", environment, { size = 4 }),
             n.gap(1),
-            n.columns(
-                { size = 1 },
-                n.button({
-                    label = " Close ",
-                    on_press = function()
-                        close()
-                    end,
-                })
-            )
+            n.paragraph({ align = "center", lines = "  <Esc> close  " })
         )
     end
 

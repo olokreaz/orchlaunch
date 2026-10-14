@@ -50,6 +50,13 @@ local function press(renderer, fragment)
             return true
         end
     end
+
+    -- Forms no longer render action buttons; the `<C-s>` mapping saves instead.
+    if fragment == "Save" and type(renderer._save) == "function" then
+        renderer._save()
+        return true
+    end
+
     return false
 end
 

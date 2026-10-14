@@ -24,19 +24,9 @@ local renderer = editor.open_cmake_project(function() saved = true end)
 vim.wait(200)
 assert(renderer and renderer:get_component_by_id("source_dir"), "editor did not render")
 renderer:get_component_by_id("source_dir"):set_current_value("${workspace}/boo")
-local pressed = false
-for _, component in ipairs(renderer:get_focusable_components()) do
-    local props = component:get_props()
-    if type(props.on_press) == "function"
-        and type(props.lines) == "string"
-        and props.lines:find("Save", 1, true)
-    then
-        props.on_press(component)
-        pressed = true
-        break
-    end
-end
-assert(pressed, "no Save button")
+assert(renderer._save, "save handler missing")
+renderer._save()
+vim.wait(50)
 print("saved:", saved)
 print("raw:", tostring(state.cmake_source_dir_raw()))
 print("resolved:", state.cmake_source_dir())

@@ -102,15 +102,8 @@ check("open native with target select", pcall(function()
     local name_input = renderer:get_component_by_id("name")
     name_input:set_current_value("Hello")
 
-    local save_button
-    for _, component in ipairs(renderer:get_focusable_components()) do
-        local props = component:get_props()
-        if type(props.on_press) == "function" and type(props.lines) == "string" and props.lines:find("Save", 1, true) then
-            save_button = save_button or component
-        end
-    end
-    assert(save_button, "save button missing")
-    save_button:get_props().on_press(save_button)
+    assert(renderer._save, "save handler missing")
+    renderer._save()
 end))
 
 check("on_saved fired", saved == true)
