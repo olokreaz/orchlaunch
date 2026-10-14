@@ -175,30 +175,32 @@ function M.open(existing, on_saved, opts)
 
     local renderer
 
-    local fields = readonly and {
-        { id = "name", label = "Name", kind = "string", readonly = true },
-        { id = "enabled", label = "Enabled", kind = "bool", readonly = true },
-        { id = "kind", label = "Imported from", kind = "string", readonly = true },
-        { id = "configure_preset", label = "Configure preset", kind = "string", readonly = true },
-        { id = "build_preset", label = "Build preset", kind = "string", readonly = true },
-        { id = "test_preset", label = "Test preset", kind = "string", readonly = true },
-        { id = "package_preset", label = "Package preset", kind = "string", readonly = true },
-        { id = "workflow_preset", label = "Workflow preset", kind = "string", readonly = true },
-        { id = "environment", label = "Environment", kind = "env", readonly = true },
-    } or {
-        { id = "name", label = "Name", kind = "string" },
-        { id = "enabled", label = "Enabled", kind = "bool" },
-        { id = "toolchain", label = "Toolchain", kind = "select" },
-        { id = "generator", label = "Generator", kind = "select" },
-        { id = "build_type", label = "Build type", kind = "select" },
-        { id = "build_dir", label = "Build dir", kind = "string" },
-        { id = "install_dir", label = "Install dir", kind = "string" },
-        { id = "configure_args", label = "Configure args", kind = "lines" },
-        { id = "build_args", label = "Build args", kind = "lines" },
-        { id = "install_args", label = "Install args", kind = "lines" },
-        { id = "definitions", label = "Definitions", kind = "env" },
-        { id = "environment", label = "Environment", kind = "env" },
-    }
+    local fields = readonly
+            and {
+                { id = "name", label = "Name", kind = "string", readonly = true },
+                { id = "enabled", label = "Enabled", kind = "bool", readonly = true },
+                { id = "kind", label = "Imported from", kind = "string", readonly = true },
+                { id = "configure_preset", label = "Configure preset", kind = "string", readonly = true },
+                { id = "build_preset", label = "Build preset", kind = "string", readonly = true },
+                { id = "test_preset", label = "Test preset", kind = "string", readonly = true },
+                { id = "package_preset", label = "Package preset", kind = "string", readonly = true },
+                { id = "workflow_preset", label = "Workflow preset", kind = "string", readonly = true },
+                { id = "environment", label = "Environment", kind = "env", readonly = true },
+            }
+        or {
+            { id = "name", label = "Name", kind = "string" },
+            { id = "enabled", label = "Enabled", kind = "bool" },
+            { id = "toolchain", label = "Toolchain", kind = "select" },
+            { id = "generator", label = "Generator", kind = "select" },
+            { id = "build_type", label = "Build type", kind = "select" },
+            { id = "build_dir", label = "Build dir", kind = "string" },
+            { id = "install_dir", label = "Install dir", kind = "string" },
+            { id = "configure_args", label = "Configure args", kind = "lines" },
+            { id = "build_args", label = "Build args", kind = "lines" },
+            { id = "install_args", label = "Install args", kind = "lines" },
+            { id = "definitions", label = "Definitions", kind = "env" },
+            { id = "environment", label = "Environment", kind = "env" },
+        }
 
     local kinds = {}
     for _, field in ipairs(fields) do
@@ -509,11 +511,10 @@ function M.open(existing, on_saved, opts)
         return n.rows(
             { flex = 1, direction = "column" },
             n.gap(1),
-            n.paragraph({ id = "title", lines = title.text }),
+            n.paragraph({ id = "title", lines = title.text, autofocus = true }),
+            n.box({ flex = 2 }),
             n.paragraph({ id = "preset", lines = table.concat(preset_lines(state, existing), "\n") }),
-            n.gap(1),
-            input("environment", " Environment (KEY=VALUE, one per line) ", environment, { size = 4 }),
-            n.gap(1),
+            n.box({ flex = 1 }),
             n.paragraph({ align = "center", lines = "  <Esc> close  " })
         )
     end
@@ -526,8 +527,7 @@ function M.open(existing, on_saved, opts)
         width = math.max(80, math.min(vim.o.columns - 4, 112)),
         height = win_height,
         on_mount = function()
-            local component = renderer:get_component_by_id("name")
-                or renderer:get_component_by_id("environment")
+            local component = renderer:get_component_by_id("name") or renderer:get_component_by_id("environment")
             if component then
                 renderer.winid = component.winid
                 renderer.bufnr = component.bufnr

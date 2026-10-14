@@ -45,7 +45,7 @@ for _, win in ipairs(vim.api.nvim_list_wins()) do
 end
 local text = table.concat(screen, "\n")
 
-check("Set Active button present", text:find("Set Active", 1, true) ~= nil)
+check("Set Active hint present", text:find("Set Active", 1, true) ~= nil)
 check("active marker on list item", text:find("● Release", 1, true) ~= nil)
 
 print(failures == 0 and "\nALL PASS" or ("\n" .. failures .. " FAILURE(S)"))

@@ -12,6 +12,7 @@ local M = {}
 --- @class OrchListSpec
 --- @field title string
 --- @field new_label string
+--- @field list_label? string Border label for the list pane.
 --- @field items fun(): table[]
 --- @field label fun(item: table): string
 --- @field details fun(item: table): string
@@ -29,7 +30,8 @@ local function open(spec)
     local n = UI.n()
     local state = require("orchlaunch.state")
 
-    local renderer = UI.renderer({ width = 92, height = 26 })
+    local dialog_width = 92
+    local renderer = UI.renderer({ width = dialog_width, height = 26 })
     local model = n.create_signal({ list = {}, details = "" })
     local mounted = false
 
@@ -147,6 +149,13 @@ local function open(spec)
         { mode = "n", key = "D", handler = delete_item },
         {
             mode = "n",
+            key = "q",
+            handler = function()
+                renderer:close()
+            end,
+        },
+        {
+            mode = "n",
             key = "A",
             handler = function()
                 if spec.set_active then
@@ -186,6 +195,7 @@ local function open(spec)
     --- Renders the item list, or a placeholder when it is empty.
     local function list_node()
         local items = model.list:get_value() or {}
+        local label = spec.list_label or " Items "
 
         if #items == 0 then
             return n.paragraph({
@@ -194,7 +204,7 @@ local function open(spec)
                 autofocus = true,
                 is_focusable = true,
                 lines = "No items yet. Press (a) to create one.",
-                border_label = " Items ",
+                border_label = label,
                 border_style = "rounded",
             })
         end
@@ -204,7 +214,7 @@ local function open(spec)
             flex = 1,
             autofocus = true,
             data = model.list,
-            border_label = " Items ",
+            border_label = label,
             border_style = "rounded",
             on_change = function()
                 update_details()
@@ -213,67 +223,79 @@ local function open(spec)
         })
     end
 
+    --- Builds the footer hint from the actions this spec supports, wrapped
+    --- to the available width so nothing gets clipped.
+    local function key_hints()
+        local parts = {
+            vim.trim(spec.new_label),
+            "e  Edit",
+            "D  Delete",
+        }
+
+        if spec.set_active then
+            parts[#parts + 1] = "A  Set Active"
+        end
+        if spec.toggle then
+            parts[#parts + 1] = "t  Toggle"
+        end
+        if spec.import then
+            parts[#parts + 1] = "i  Import presets"
+        end
+        if spec.project then
+            parts[#parts + 1] = "p  Project"
+        end
+
+        parts[#parts + 1] = "<Esc>  Close"
+
+        local max = dialog_width - 8
+        local lines, line = {}, ""
+
+        for _, part in ipairs(parts) do
+            local candidate = (#line == 0) and part or (line .. "    " .. part)
+            if #line > 0 and vim.fn.strwidth(candidate) > max then
+                lines[#lines + 1] = line
+                line = part
+            else
+                line = candidate
+            end
+        end
+
+        if line ~= "" then
+            lines[#lines + 1] = line
+        end
+
+        return lines
+    end
+
     local body = function()
         refresh_list()
 
-        local actions = {
-            n.button({ label = spec.new_label, on_press = new_item }),
-            n.gap(1),
-            n.button({ label = " Edit (e) ", on_press = edit_item }),
-            n.gap(1),
-            n.button({ label = " Delete (D) ", on_press = delete_item }),
-        }
-
-        if spec.project then
-            actions[#actions + 1] = n.gap(1)
-            actions[#actions + 1] = n.button({ label = " Project (p) ", on_press = edit_project })
-        end
-
-        if spec.toggle then
-            actions[#actions + 1] = n.gap(1)
-            actions[#actions + 1] = n.button({ label = " Toggle (t) ", on_press = toggle_item })
-        end
-
-        if spec.set_active then
-            actions[#actions + 1] = n.gap(1)
-            actions[#actions + 1] = n.button({ label = " Set Active (A) ", on_press = set_active })
-        end
-
-        if spec.import then
-            actions[#actions + 1] = n.gap(1)
-            actions[#actions + 1] = n.button({ label = " Import presets (i) ", on_press = import_items })
-        end
-
-        actions[#actions + 1] = n.gap(1)
-        actions[#actions + 1] = n.button({
-            label = " Close ",
-            on_press = function()
-                renderer:close()
-            end,
-        })
-
         return n.rows(
-            { flex = 1, direction = "column", padding = { top = 1, left = 1, right = 1, bottom = 1 } },
+            { flex = 1, direction = "column" },
             n.paragraph({ lines = spec.title, align = "center", is_focusable = false }),
             n.gap(1),
             n.columns(
                 { flex = 1 },
                 list_node(),
-                n.gap(1),
+                n.gap(2),
                 n.box(
                     { flex = 2, direction = "column" },
                     n.paragraph({
                         id = "orch_details",
                         flex = 1,
                         is_focusable = false,
-                        lines = model.details,
                         border_label = " Details ",
                         border_style = "rounded",
+                        lines = model.details,
                     })
                 )
             ),
             n.gap(1),
-            n.columns({ size = 1 }, (table.unpack or unpack)(actions))
+            n.paragraph({
+                align = "center",
+                is_focusable = false,
+                lines = table.concat(key_hints(), "\n"),
+            })
         )
     end
 
@@ -359,6 +381,7 @@ function M.open_cmake_profiles()
     return open({
         title = ("CMake Profiles — project: %s"):format(state.cmake_source_dir()),
         new_label = " New profile (a) ",
+        list_label = " Profiles ",
         items = function()
             return state.cmake_profiles()
         end,

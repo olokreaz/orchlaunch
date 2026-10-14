@@ -52,7 +52,7 @@ function M.renderer(opts)
 end
 
 --- Default inner padding between the frame border and the content.
-local FRAME_PADDING = { top = 1, bottom = 1, left = 2, right = 2 }
+local FRAME_PADDING = { top = 3, bottom = 3, left = 5, right = 5 }
 
 --- Normalizes a padding option into a full `{ top, bottom, left, right }` map.
 ---@param padding? false|{ top?: integer, bottom?: integer, left?: integer, right?: integer }
@@ -210,10 +210,10 @@ function M.format_lines(list)
 end
 
 function M.apply_theme()
-  pcall(vim.api.nvim_set_hl, 0, "NuiComponentsSelectOption", { link = "Normal" })
-  pcall(vim.api.nvim_set_hl, 0, "NuiComponentsSelectOptionSelected", { link = "Visual" })
-  pcall(vim.api.nvim_set_hl, 0, "NuiComponentsButton", { link = "NormalFloat" })
-  pcall(vim.api.nvim_set_hl, 0, "NuiComponentsBorder", { link = "FloatBorder" })
+    pcall(vim.api.nvim_set_hl, 0, "NuiComponentsSelectOption", { link = "Normal" })
+    pcall(vim.api.nvim_set_hl, 0, "NuiComponentsSelectOptionSelected", { link = "Visual" })
+    pcall(vim.api.nvim_set_hl, 0, "NuiComponentsButton", { link = "NormalFloat" })
+    pcall(vim.api.nvim_set_hl, 0, "NuiComponentsBorder", { link = "FloatBorder" })
 end
 
 return M
