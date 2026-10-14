@@ -101,12 +101,12 @@ The profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`), **Edit**
 **Import** (`i`) and **Project** (`p`, edit the CMake project directory).
 Choosing **Set active** enables the profile.
 
-The editor is a `nui.nvim` field list. Move with `j`/`k` (or arrows), press
-`<CR>` to edit the focused field (text prompt, option menu or multi-line
-editor), `<Space>` to toggle booleans, `<C-s>` to save and `q`/`<Esc>` to close.
-Labels and values are colour-highlighted; each row is laid out `label ····· value`
-with the value right-aligned to the window edge, and the border title tracks the
-profile name.
+The editor is a `nui-components` form. Move with `j`/`k` (or arrows), press
+`<CR>` to edit the focused field, `<Space>` to toggle booleans, `<C-s>` to save
+and `q`/`<Esc>` to close. The form is reactive: a signal-driven title paragraph
+tracks the profile name while a summary line reflects the generator, build type,
+toolchain and enabled state as you change them. Sections (Profile, Build,
+Toolchain, Arguments, Variables) are laid out in two columns.
 
 Manual profiles expose every field — name, enabled, toolchain, generator, build
 type, directories, args, definitions and environment — and never reference
@@ -336,7 +336,7 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 ### UI (nui.nvim + nui-components)
 - Browser: list of configurations with active marker, actions (Run/Debug/Edit/Delete/New, Load CMake, Open CMake Profiles/Toolchains/External Tools). Keys: `r`, `d`, `e`, `D`, `A` (set active), `n`, `m` (Load CMake), `C` (CMake profiles), `T` (toolchains), `X` (external tools), `R` (reload).
 - Editors per type: native/remote/compound/toolchain/external tool/CMake project. Forms built with nui-components.
-- CMake profile editor (`ui/cmake_profile.lua`) is a raw `nui.nvim` popup field list: `j`/`k` move, `<CR>` edits (prompt/menu/multi-line), `<Space>` toggles, `<C-s>` saves, `q`/`<Esc>` closes. Manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand).
+- CMake profile editor (`ui/cmake_profile.lua`) is a `nui-components` form: `j`/`k` move, `<CR>` edits, `<Space>` toggles, `<C-s>` saves, `q`/`<Esc>` closes. Signals drive the live title/summary paragraphs; sections use rows/columns/gap. Manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand).
 - List dialogs: generic reusable list with Details pane, actions (New/Edit/Delete/Toggle/Set Active/Import/Project), keyboard mappings (`a,e,D,t,A,i,p`), autofocus for key handling.
 - Project-wide CMake project editor accessible via `p` in CMake profiles manager or `:OrchLaunchCMakeProject`.
 

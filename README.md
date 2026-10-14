@@ -227,7 +227,7 @@ reads back target names, types and artifact paths.
 
 The CMake profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`),
 **Edit** (`e`), **Delete** (`D`), **Toggle** (`t`), **Set active** (`A`),
-**Import** (`i`) and **Project** (`p`). Editing opens a `nui.nvim` field list:
+**Import** (`i`) and **Project** (`p`). Editing opens a `nui-components` form:
 move with `j`/`k`, press `<CR>` to edit a field, `<Space>` to toggle booleans,
 save with `Ctrl+S`, close with `q` / `Esc`. Manual profiles are fully editable;
 profiles imported from `CMakePresets.json` / `CMakeUserPresets.json` are
