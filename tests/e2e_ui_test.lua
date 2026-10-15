@@ -1,4 +1,4 @@
--- End-to-end test: the nui-components UI layer.
+-- End-to-end test: the Volt UI engine.
 --
 -- Renders the browser, every editor form and the list dialogs, drives their
 -- widgets (text inputs, selects, checkboxes, buttons) and verifies the results
@@ -26,16 +26,9 @@ local function noted(fragment)
     return false
 end
 
---- Concatenates every visible buffer line (floating windows included).
+--- Concatenates every rendered form line (the engine paints Volt virtual text).
 local function screen_text()
-    local lines = {}
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local buf = vim.api.nvim_win_get_buf(win)
-        for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-            lines[#lines + 1] = line
-        end
-    end
-    return table.concat(lines, "\n")
+    return require("orchlaunch.ui.kit").rendered_text()
 end
 
 --- Presses the first focusable button whose rendered label contains `fragment`.
@@ -131,7 +124,7 @@ vim.wait(50)
 -- 2. native editor — full round trip
 -- ============================================================================
 local saved_native = false
-local r = require("orchlaunch.ui.editor").open_native(nil, function()
+local r = require("orchlaunch.ui.editors.native").open(nil, function()
     saved_native = true
 end)
 vim.wait(300)
@@ -169,7 +162,7 @@ h.eq("native before external tool", native and native.before.tools[2].tool, "gen
 
 -- duplicate name is rejected
 notifications = {}
-local dup = require("orchlaunch.ui.editor").open_native(nil, nil)
+local dup = require("orchlaunch.ui.editors.native").open(nil, nil)
 vim.wait(200)
 set(dup, "name", "Game")
 press(dup, "Save")
@@ -181,7 +174,7 @@ vim.wait(50)
 -- 3. remote debug editor
 -- ============================================================================
 local saved_remote = false
-local rr = require("orchlaunch.ui.editor").open_remote(nil, function()
+local rr = require("orchlaunch.ui.editors.remote").open(nil, function()
     saved_remote = true
 end)
 vim.wait(300)
@@ -204,7 +197,7 @@ h.eq("remote adapter persisted", remote and remote.adapter, "lldb")
 -- 4. compound editor
 -- ============================================================================
 local saved_compound = false
-local rc = require("orchlaunch.ui.editor").open_compound(nil, function()
+local rc = require("orchlaunch.ui.editors.compound").open(nil, function()
     saved_compound = true
 end)
 vim.wait(300)
@@ -222,7 +215,7 @@ h.eq("compound children persisted", compound and compound.configurations, { "Gam
 -- 5. toolchain editor
 -- ============================================================================
 local saved_tc = false
-local rt = require("orchlaunch.ui.editor").open_toolchain(nil, function()
+local rt = require("orchlaunch.ui.editors.toolchain").open(nil, function()
     saved_tc = true
 end)
 vim.wait(300)
@@ -246,7 +239,7 @@ h.eq("toolchain type", tc and tc.type, "system")
 -- 6. external tool editor
 -- ============================================================================
 local saved_ext = false
-local rext = require("orchlaunch.ui.editor").open_external_tool(nil, function()
+local rext = require("orchlaunch.ui.editors.external_tool").open(nil, function()
     saved_ext = true
 end)
 vim.wait(300)
@@ -266,7 +259,7 @@ h.eq("external tool args", ext and ext.args, { "--release", "--verbose" })
 -- ============================================================================
 -- 7. toolchains list dialog
 -- ============================================================================
-local tl = require("orchlaunch.ui.list_dialog").open_toolchains()
+local tl = require("orchlaunch.ui.dialogs.toolchains").open()
 vim.wait(300)
 local tl_text = screen_text()
 h.check("toolchains dialog list", tl:get_component_by_id("orch_list") ~= nil)
@@ -280,7 +273,7 @@ vim.wait(50)
 -- ============================================================================
 -- 8. CMake profiles dialog
 -- ============================================================================
-local cp = require("orchlaunch.ui.list_dialog").open_cmake_profiles()
+local cp = require("orchlaunch.ui.dialogs.cmake_profiles").open()
 vim.wait(300)
 local cp_text = screen_text()
 h.check("cmake profiles dialog list", cp:get_component_by_id("orch_list") ~= nil)

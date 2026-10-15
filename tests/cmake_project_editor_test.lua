@@ -10,11 +10,11 @@ write(root .. "/boo/CMakePresets.json", [[{ "version": 6, "configurePresets": [ 
 
 local orch = require("orchlaunch")
 local state = require("orchlaunch.state")
-local editor = require("orchlaunch.ui.editor")
+local editor = require("orchlaunch.ui.editors.cmake_project")
 orch.create_project(root)
 
 local saved = false
-local renderer = editor.open_cmake_project(function() saved = true end)
+local renderer = editor.open(function() saved = true end)
 vim.wait(200)
 assert(renderer and renderer:get_component_by_id("source_dir"), "editor did not render")
 renderer:get_component_by_id("source_dir"):set_current_value("${workspace}/boo")

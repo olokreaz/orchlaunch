@@ -101,7 +101,7 @@ The profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`), **Edit**
 **Import** (`i`) and **Project** (`p`, edit the CMake project directory).
 Choosing **Set active** enables the profile.
 
-The editor is a `nui-components` form. Move with `j`/`k` (or arrows), press
+The editor is a Volt form. Move with `j`/`k` (or arrows), press
 `<CR>` to edit the focused field, `<Space>` to toggle booleans, `<C-s>` to save
 and `q`/`<Esc>` to close. The form is reactive: a signal-driven title paragraph
 tracks the profile name while a summary line reflects the generator, build type,
@@ -333,11 +333,12 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - Target resolution for native/remote: prefer File API artifact (absolute/relative resolved), fallback to filesystem search in build dir for common names.
 - Legacy `[cmake]` flat table auto-migrated to single profile named `Default`.
 
-### UI (nui.nvim + nui-components)
+### UI (Volt)
+- The whole UI is built on [`nvzone/volt`](https://github.com/nvzone/volt) through a small engine (`ui/kit.lua`) that turns one declarative builder (`UI.n()`) into a floating Volt buffer and exposes the scripting hooks (`get_component_by_id`, `get_focusable_components`, `_save`) used by the tests. Every window shares this single style: `rows`/`columns`/`box` containers, `gap` spacers, `paragraph`/`line`/`text` text and `text_input`/`checkbox`/`select`/`option`/`button` widgets.
 - Browser: list of configurations with active marker, actions (Run/Debug/Edit/Delete/New, Load CMake, Open CMake Profiles/Toolchains/External Tools). Keys: `r`, `d`, `e`, `D`, `A` (set active), `n`, `m` (Load CMake), `C` (CMake profiles), `T` (toolchains), `X` (external tools), `R` (reload).
-- Editors per type: native/remote/compound/toolchain/external tool/CMake project. Forms built with nui-components.
-- CMake profile editor (`ui/cmake_profile.lua`) is a `nui-components` form: `j`/`k` move, `<CR>` edits, `<Space>` toggles, `<C-s>` saves, `q`/`<Esc>` closes. Signals drive the live title/summary paragraphs; sections use rows/columns/gap. Manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand).
-- List dialogs: generic reusable list with Details pane, actions (New/Edit/Delete/Toggle/Set Active/Import/Project), keyboard mappings (`a,e,D,t,A,i,p`), autofocus for key handling.
+- Editors per type: native/remote/compound/toolchain/external tool/CMake project. All forms use the same Volt builder.
+- CMake profile editor (`ui/editors/cmake_profile.lua`) is a Volt form: `j`/`k` move, `<CR>` edits/toggles, `<C-s>` saves, `q`/`<Esc>` closes. Signals drive the live title/summary paragraphs; sections use rows/columns/gap. Manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand). It keeps a `.orch` scripting facade (`fields`, `values`, `set`, `activate`, `save`, `close`, `index_of`) for the tests.
+- List dialogs: generic reusable list with Details pane, actions (New/Edit/Delete/Toggle/Set Active/Import/Project), keyboard mappings (`a,e,D,t,A,i,p`).
 - Project-wide CMake project editor accessible via `p` in CMake profiles manager or `:OrchLaunchCMakeProject`.
 
 ### Commands

@@ -97,7 +97,9 @@ end
 function M.open()
     local state = require("orchlaunch.state")
     local active = require("orchlaunch.active")
-    local editor = require("orchlaunch.ui.editor")
+    local native_editor = require("orchlaunch.ui.editors.native")
+    local remote_editor = require("orchlaunch.ui.editors.remote")
+    local compound_editor = require("orchlaunch.ui.editors.compound")
     local runner = require("orchlaunch.runner")
 
     if not state.is_loaded() then
@@ -182,14 +184,14 @@ function M.open()
                     label = " Native ",
                     autofocus = true,
                     on_press = pick(function()
-                        editor.open_native(nil, nil, { on_unmount = reopen })
+                        native_editor.open(nil, nil, { on_unmount = reopen })
                     end),
                 }),
                 n.button({ label = " Remote Debug ", on_press = pick(function()
-                    editor.open_remote(nil, nil, { on_unmount = reopen })
+                    remote_editor.open(nil, nil, { on_unmount = reopen })
                 end) }),
                 n.button({ label = " Compound ", on_press = pick(function()
-                    editor.open_compound(nil, nil, { on_unmount = reopen })
+                    compound_editor.open(nil, nil, { on_unmount = reopen })
                 end) })
             )
         end)
@@ -206,11 +208,11 @@ function M.open()
         renderer:close()
 
         if cfg.type == "native" then
-            editor.open_native(cfg, nil, { on_unmount = reopen })
+            native_editor.open(cfg, nil, { on_unmount = reopen })
         elseif cfg.type == "remote-debug" then
-            editor.open_remote(cfg, nil, { on_unmount = reopen })
+            remote_editor.open(cfg, nil, { on_unmount = reopen })
         elseif cfg.type == "compound" then
-            editor.open_compound(cfg, nil, { on_unmount = reopen })
+            compound_editor.open(cfg, nil, { on_unmount = reopen })
         else
             reopen()
             UI.notify(("cannot edit unknown configuration type: %s"):format(cfg.type), ERROR)
@@ -296,17 +298,17 @@ function M.open()
 
     local function open_toolchains()
         renderer:close()
-        require("orchlaunch.ui.list_dialog").open_toolchains()
+        require("orchlaunch.ui.dialogs.toolchains").open()
     end
 
     local function open_external_tools()
         renderer:close()
-        require("orchlaunch.ui.list_dialog").open_external_tools()
+        require("orchlaunch.ui.dialogs.external_tools").open()
     end
 
     local function open_cmake()
         renderer:close()
-        require("orchlaunch.ui.list_dialog").open_cmake_profiles()
+        require("orchlaunch.ui.dialogs.cmake_profiles").open()
     end
 
     --- Renders the configuration list, or a placeholder when it is empty.

@@ -72,7 +72,6 @@ end
 --- @param name string
 local function edit_configuration(name)
     local state = require("orchlaunch.state")
-    local editor = require("orchlaunch.ui.editor")
 
     local cfg = state.configuration(name)
     if not cfg then
@@ -81,11 +80,11 @@ local function edit_configuration(name)
     end
 
     if cfg.type == "native" then
-        editor.open_native(cfg)
+        require("orchlaunch.ui.editors.native").open(cfg)
     elseif cfg.type == "remote-debug" then
-        editor.open_remote(cfg)
+        require("orchlaunch.ui.editors.remote").open(cfg)
     elseif cfg.type == "compound" then
-        editor.open_compound(cfg)
+        require("orchlaunch.ui.editors.compound").open(cfg)
     else
         notify(("cannot edit unknown configuration type: %s"):format(cfg.type), ERROR)
     end
@@ -208,28 +207,28 @@ function M.register()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.ui.list_dialog").open_toolchains()
+        require("orchlaunch.ui.dialogs.toolchains").open()
     end, { desc = "Manage toolchains" })
 
     vim.api.nvim_create_user_command("OrchLaunchExternalTools", function()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.ui.list_dialog").open_external_tools()
+        require("orchlaunch.ui.dialogs.external_tools").open()
     end, { desc = "Manage external tools" })
 
     vim.api.nvim_create_user_command("OrchLaunchCMake", function()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.ui.list_dialog").open_cmake_profiles()
+        require("orchlaunch.ui.dialogs.cmake_profiles").open()
     end, { desc = "Manage CMake profiles" })
 
     vim.api.nvim_create_user_command("OrchLaunchCMakeProject", function()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.ui.editor").open_cmake_project()
+        require("orchlaunch.ui.editors.cmake_project").open()
     end, { desc = "Set the CMake project directory" })
 
     vim.api.nvim_create_user_command("OrchLaunchImportCMakePresets", function()

@@ -39,8 +39,8 @@ target discovery — driven from TOML files inside a `.orch` project.
   disabled profiles.
 - **CMake target discovery** — via the CMake File API (`codemodel-v2`), with
   automatic native run configurations for executable targets.
-- **Run/Debug browser** — a `nui-components` UI for the list, details and every
-  manager, backed by plain TOML on disk.
+- **Run/Debug browser** — a [Volt](https://github.com/nvzone/volt)-based UI for the
+  list, details and every manager, backed by plain TOML on disk.
 - **Active configuration** — remembered per project (outside `.orch`).
 
 > Debugging (DAP) integrates with nvim-dap (launch for native, attach for remote-debug). If nvim-dap is not installed, OrchLaunch will notify accordingly.
@@ -48,8 +48,7 @@ target discovery — driven from TOML files inside a `.orch` project.
 ## Requirements
 
 - Neovim ≥ 0.10 (uses `vim.system`, `vim.json`, `vim.fs`)
-- [nui.nvim](https://github.com/MunifTanjim/nui.nvim)
-- [nui-components.nvim](https://github.com/grapp-dev/nui-components.nvim)
+- [volt.nvim](https://github.com/nvzone/volt)
 - [toml.nvim](https://github.com/wsdjeg/toml.nvim) (parsing only)
 - CMake on `PATH` (or configured per toolchain) for the CMake features
 
@@ -61,8 +60,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
   "olokreaz/orchlauncher.nvim.git",
   dependencies = {
-    "MunifTanjim/nui.nvim",
-    "grapp-dev/nui-components.nvim",
+    "nvzone/volt",
     "wsdjeg/toml.nvim",
   },
   config = function()
@@ -227,7 +225,7 @@ reads back target names, types and artifact paths.
 
 The CMake profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`),
 **Edit** (`e`), **Delete** (`D`), **Toggle** (`t`), **Set active** (`A`),
-**Import** (`i`) and **Project** (`p`). Editing opens a `nui-components` form:
+**Import** (`i`) and **Project** (`p`). Editing opens a Volt form:
 move with `j`/`k`, press `<CR>` to edit a field, `<Space>` to toggle booleans,
 save with `Ctrl+S`, close with `q` / `Esc`. Manual profiles are fully editable;
 profiles imported from `CMakePresets.json` / `CMakeUserPresets.json` are
@@ -291,7 +289,14 @@ orchlauncher.nvim/
 │   ├── types.lua       -- LuaCATS type definitions
 │   ├── commands.lua    -- user commands
 │   ├── cmake.lua       -- CMake configuration and target discovery
-│   └── ui/             -- nui-components browser, editors and dialogs
+│   └── ui/             -- Volt UI engine and screens
+│       ├── kit.lua     -- the Volt renderer + declarative builder
+│       ├── init.lua    -- shared helpers (`n`, `renderer`, env parsing)
+│       ├── form.lua    -- shared editor field helpers (input/select/save)
+│       ├── browser.lua -- the Run/Debug configurations browser
+│       ├── scratch.lua -- scratch output viewer
+│       ├── editors/    -- one module per editor window (native, remote, …)
+│       └── dialogs/    -- list dialogs (toolchains, external tools, CMake profiles)
 ├── tests/              -- headless test suite
 └── README.md
 ```
@@ -307,7 +312,7 @@ tests/run.sh
 
 Dependencies are looked up in `stdpath("data")/lazy` (and the other standard
 plugin locations); point `ORCHLAUNCH_DEPS` at a directory containing them
-(`nui.nvim`, `nui-components.nvim`, `toml.nvim`) to override.
+(`toml.nvim`, `volt`) to override.
 
 ## License
 

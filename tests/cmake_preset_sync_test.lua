@@ -85,9 +85,9 @@ vim.notify = function(msg)
     notifications[#notifications + 1] = tostring(msg)
 end
 
-local editor = require("orchlaunch.ui.editor")
+local editor = require("orchlaunch.ui.editors.cmake_profile")
 local closed = false
-local popup = editor.open_cmake(state.cmake_profile("debug"), function()
+local popup = editor.open(state.cmake_profile("debug"), function()
     closed = true
 end)
 vim.wait(200)

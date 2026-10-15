@@ -1,4 +1,4 @@
--- OrchLaunch — CMake profile editor built on `nui-components`.
+-- OrchLaunch — CMake profile editor built on the Volt UI engine.
 --
 -- Manual profiles own every build setting; a new profile starts from sane
 -- defaults (generator = Ninja, build type = Debug). Nothing preset-related is
@@ -469,8 +469,18 @@ function M.open(existing, on_saved, opts)
             check("enabled", " Enabled", existing.enabled ~= false, refresh_summary),
             n.gap(1),
             heading("Build"),
-            select("generator", " Generator ", generator_items(existing.generator or "Ninja"), existing.generator or "Ninja"),
-            select("build_type", " Build type ", build_type_items(existing.build_type or "Debug"), existing.build_type or "Debug"),
+            select(
+                "generator",
+                " Generator ",
+                generator_items(existing.generator or "Ninja"),
+                existing.generator or "Ninja"
+            ),
+            select(
+                "build_type",
+                " Build type ",
+                build_type_items(existing.build_type or "Debug"),
+                existing.build_type or "Debug"
+            ),
             input("build_dir", " Build directory ", existing.build_dir, { placeholder = "build" }),
             input("install_dir", " Install directory ", existing.install_dir, { placeholder = "install" })
         )
@@ -511,11 +521,11 @@ function M.open(existing, on_saved, opts)
         return n.rows(
             { flex = 1, direction = "column" },
             n.gap(1),
-            n.paragraph({ id = "title", lines = title.text, autofocus = true }),
+            n.paragraph({ id = "title", lines = title.text }),
             n.box({ flex = 2 }),
             n.paragraph({ id = "preset", lines = table.concat(preset_lines(state, existing), "\n") }),
             n.box({ flex = 1 }),
-            n.paragraph({ align = "center", lines = "  <Esc> close  " })
+            n.paragraph({ align = "center", lines = "  <Esc> close  ", autofocus = true })
         )
     end
 

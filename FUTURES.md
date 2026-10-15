@@ -33,11 +33,11 @@
 - [x] Remote-debug: маршрутизация (только debug-режим), интеграция с nvim-dap через debug overlay
 - [x] External tools: синхронный запуск через `vim.system`, sudo поддержка
 
-## UI (nui-components)
-- [x] Общие хелперы (`UI.*`), рендерер с клавиатурой
+## UI (Volt)
+- [x] Общие хелперы (`UI.*`), декларативный билдер + рендерер с клавиатурой (`ui/kit.lua`)
 - [x] Браузер конфигураций (Run/Debug): список, детали, действия r/d/e/a/y/D/A/m, переходы в диалоги
 - [x] Редакторы: native/remote-debug/compound, toolchain, external tool, CMake project
-- [x] Редактор CMake-профиля на сыром `nui.nvim` (field-list, read-only preset-профили)
+- [x] Редактор CMake-профиля на Volt (field-list, read-only preset-профили, `.orch` фасад)
 - [x] Target-picker (select CMake targets + свободный путь)
 - [x] Списочные диалоги: Toolchains, External Tools, CMake Profiles (с импортом пресетов, toggle, set active, project)
 - [x] Theme hooks
@@ -65,7 +65,7 @@
 - [ ] Улучшения target discovery: кэширование по mtime build dir, инвалидация
 
 ## Известные ограничения
-- Требуются `nui.nvim`, `nui-components.nvim`, `toml.nvim` (parse), `vim.system`
+- Требуются `volt`, `toml.nvim` (parse), `vim.system`
 - Neovim >= 0.10 (используются vim.system/json/fs API)
 - ctest должен запускаться из source dir при использовании CMakePresets (исправлено)
 - Перед resolve CMake target'а выполняются before-launch шаги (исправлено)

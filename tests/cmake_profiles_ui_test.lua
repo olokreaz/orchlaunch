@@ -16,7 +16,7 @@ state.add_cmake_profile(config.cmake_settings({ name = "Release", build_type = "
 state.set_active_cmake_profile("Release")
 state.save()
 
-local renderer = require("orchlaunch.ui.list_dialog").open_cmake_profiles()
+local renderer = require("orchlaunch.ui.dialogs.cmake_profiles").open()
 vim.wait(300)
 
 local failures = 0
@@ -30,14 +30,7 @@ end
 local list = renderer:get_component_by_id("orch_list")
 check("profile list rendered", list ~= nil)
 
-local screen = {}
-for _, win in ipairs(vim.api.nvim_list_wins()) do
-    local buf = vim.api.nvim_win_get_buf(win)
-    for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-        screen[#screen + 1] = line
-    end
-end
-local text = table.concat(screen, "\n")
+local text = require("orchlaunch.ui.kit").rendered_text()
 
 check("Set Active hint present", text:find("Set Active", 1, true) ~= nil)
 check("active marker on list item", text:find("● Release", 1, true) ~= nil)

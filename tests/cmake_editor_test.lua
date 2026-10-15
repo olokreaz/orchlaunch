@@ -1,4 +1,4 @@
--- Headless test for the raw-nui CMake profile editor.
+-- Headless test for the Volt CMake profile editor.
 --
 -- Opens the editor, drives it through its `.orch` test hooks and verifies the
 -- profile is persisted through `state`. Covers manual profiles (every field),
@@ -48,7 +48,7 @@ f:write([[
 ]])
 f:close()
 
-local editor = require("orchlaunch.ui.editor")
+local editor = require("orchlaunch.ui.editors.cmake_profile")
 local state = require("orchlaunch.state")
 local UI = require("orchlaunch.ui")
 require("orchlaunch").create_project(root)
@@ -59,7 +59,7 @@ state.save()
 -- 1. manual profile editor
 -- ============================================================================
 local saved = false
-local popup = editor.open_cmake(nil, function()
+local popup = editor.open(nil, function()
     saved = true
 end)
 vim.wait(200)
@@ -141,7 +141,7 @@ local function notifications_grew()
     return #notifications > notifications_count
 end
 
-local invalid = editor.open_cmake(nil, nil)
+local invalid = editor.open(nil, nil)
 vim.wait(100)
 notifications_count = #notifications
 invalid.orch.set("name", "")
@@ -151,7 +151,7 @@ check("empty name rejected", notifications_grew(), table.concat(notifications, "
 check("editor stays open on error", vim.api.nvim_win_is_valid(invalid.winid))
 invalid.orch.close(false)
 
-local dup = editor.open_cmake(nil, nil)
+local dup = editor.open(nil, nil)
 vim.wait(100)
 notifications_count = #notifications
 dup.orch.set("name", "Debug")
@@ -173,7 +173,7 @@ state.add_cmake_profile({
 state.save()
 
 local preset_saved = false
-local preset_popup = editor.open_cmake(state.cmake_profile("PresetDebug"), function()
+local preset_popup = editor.open(state.cmake_profile("PresetDebug"), function()
     preset_saved = true
 end)
 vim.wait(200)

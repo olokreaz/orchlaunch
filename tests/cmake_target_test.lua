@@ -76,11 +76,11 @@ check("build produces artifact", (function()
 end)())
 
 -- 3. editor target select ----------------------------------------------------
-local editor = require("orchlaunch.ui.editor")
+local editor = require("orchlaunch.ui.editors.native")
 local saved = false
 
 check("open native with target select", pcall(function()
-    local renderer = editor.open_native(nil, function()
+    local renderer = editor.open(nil, function()
         saved = true
     end)
     vim.wait(300)

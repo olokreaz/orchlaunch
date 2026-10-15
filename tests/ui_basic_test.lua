@@ -27,10 +27,20 @@ local modules = {
     "orchlaunch.runner",
     "orchlaunch.commands",
     "orchlaunch.ui",
-    "orchlaunch.ui.editor",
     "orchlaunch.ui.browser",
-    "orchlaunch.ui.list_dialog",
     "orchlaunch.ui.scratch",
+    "orchlaunch.ui.form",
+    "orchlaunch.ui.editors.native",
+    "orchlaunch.ui.editors.remote",
+    "orchlaunch.ui.editors.compound",
+    "orchlaunch.ui.editors.external_tool",
+    "orchlaunch.ui.editors.toolchain",
+    "orchlaunch.ui.editors.cmake_profile",
+    "orchlaunch.ui.editors.cmake_project",
+    "orchlaunch.ui.dialogs.list",
+    "orchlaunch.ui.dialogs.toolchains",
+    "orchlaunch.ui.dialogs.external_tools",
+    "orchlaunch.ui.dialogs.cmake_profiles",
 }
 
 for _, module in ipairs(modules) do
