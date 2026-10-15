@@ -15,7 +15,7 @@ state.add_configuration(config.native({ name="Game", target="/bin/echo", before=
 state.save()
 -- idempotency: load -> save -> compare
 state.reload(); state.save()
-local file = io.open(root.."/.orch/cmake_settings.toml"):read("*a")
+local file = io.open(root.."/.orch/cmake_settings.json"):read("*a")
 print(file)
 state.reload()
 assert(state.cmake_settings().generator == "Ninja", "generator lost")

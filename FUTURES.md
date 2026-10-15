@@ -6,7 +6,7 @@
 - [x] Создание `.orch/` проекта (`project.create`), поиск вверх по дереву (`project.locate`)
 - [x] Единое хранилище состояния (`state`) с загрузкой/перезагрузкой всех файлов
 - [x] Фабрики конфигов (`config.*`): native/remote-debug/compound, toolchains, external tools, cmake settings
-- [x] TOML сериализация/парсинг (runtime-маркер `_runtime` не попадает в файлы), prepare/stringify
+- [x] JSON сериализация/парсинг через встроенный `vim.json` (детерминированный pretty-print, сортировка ключей), load/stringify
 - [x] Lua-литералы для scratch-редакторов (`to_lua/from_lua`)
 - [x] Разрешение переменных `${workspace}`, `${orch}`, путей и переменных окружения
 - [x] Активная конфигурация в `stdpath("state")/orchlaunch/active.json` (не пишется в `.orch`)
@@ -65,7 +65,7 @@
 - [ ] Улучшения target discovery: кэширование по mtime build dir, инвалидация
 
 ## Известные ограничения
-- Требуются `volt`, `toml.nvim` (parse), `vim.system`
+- Требуются `volt` и `vim.system` (JSON — встроенный `vim.json`)
 - Neovim >= 0.10 (используются vim.system/json/fs API)
 - ctest должен запускаться из source dir при использовании CMakePresets (исправлено)
 - Перед resolve CMake target'а выполняются before-launch шаги (исправлено)

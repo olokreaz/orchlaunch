@@ -64,7 +64,7 @@ local runner = require("orchlaunch.runner")
 
 -- 1. project scaffolding -----------------------------------------------------
 h.check("project scaffolded", orch.create_project(root) ~= nil, "create_project returned nil")
-for _, file in ipairs({ "run_configurations.toml", "external_tools.toml", "toolchain.toml", "cmake_settings.toml" }) do
+for _, file in ipairs({ "run_configurations.json", "external_tools.json", "toolchain.json", "cmake_settings.json" }) do
     h.check("scaffold " .. file, vim.fn.filereadable(root .. "/.orch/" .. file) == 1)
 end
 h.check("state loaded", state.is_loaded())

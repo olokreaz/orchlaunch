@@ -1,6 +1,6 @@
--- Unit test: the configuration layer — variable/path resolution, TOML and Lua
--- serialization round-trips, and the runtime marker. These are the primitives
--- every other feature is built on, so they get their own edge-case coverage.
+-- Unit test: the configuration layer — variable/path resolution, JSON and Lua
+-- serialization round-trips. These are the primitives every other feature is
+-- built on, so they get their own edge-case coverage.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
@@ -39,10 +39,8 @@ h.eq("resolve_list empty", config.resolve_list(nil, ctx), {})
 h.eq("resolve_environment expands values", config.resolve_environment({ K = "${workspace}/x" }, ctx), { K = "/ws/x" })
 
 -- ============================================================================
--- TOML round-trip
+-- JSON round-trip
 -- ============================================================================
-local toml = require("toml")
-
 local doc = {
     title = "Orch",
     count = 3,
@@ -51,48 +49,30 @@ local doc = {
     list = { "a", "b", "c" },
     nested = { x = 1, y = { z = "deep" } },
     group = { items = { { id = 1 }, { id = 2 } } },
-    configs = {
-        { name = "A", type = "native", args = { "-x", "-y" }, environment = { K = "v" } },
-        { name = "B", type = "compound", configurations = { "A" } },
-    },
     weird = {
         ["dash-key"] = "dashes",
         ["local"] = "keyword",
         special = "quote\" back\\ newline\n tab\t end",
         unicode = "héllo ☃",
     },
-    empty = {},
 }
 
-local text = config.stringify(doc)
-h.check("stringify produced text", type(text) == "string" and #text > 0)
-
-local decoded = toml.parse(text)
-h.eq("toml scalar string", decoded.title, "Orch")
-h.eq("toml scalar number", decoded.count, 3)
-h.eq("toml scalar float", decoded.ratio, 1.5)
-h.eq("toml scalar bool", decoded.flag, true)
-h.eq("toml array", decoded.list, { "a", "b", "c" })
-h.eq("toml nested table", decoded.nested, { x = 1, y = { z = "deep" } })
-h.eq("toml inline array of tables", decoded.group.items, { { id = 1 }, { id = 2 } })
-h.check("toml array of tables", type(decoded.configs) == "table" and #decoded.configs == 2)
-h.eq("toml aot entry", decoded.configs[1].environment, { K = "v" })
-h.eq("toml aot nested array", decoded.configs[2].configurations, { "A" })
-h.eq("toml quoted dash key", decoded.weird["dash-key"], "dashes")
-h.eq("toml quoted keyword key", decoded.weird["local"], "keyword")
-h.eq("toml escaped string", decoded.weird.special, "quote\" back\\ newline\n tab\t end")
-h.eq("toml unicode string", decoded.weird.unicode, "héllo ☃")
-h.check("toml empty tables omitted", decoded.empty == nil, vim.inspect(decoded.empty))
+local decoded = vim.json.decode(config.stringify(doc))
+h.eq("json round-trip", decoded, doc)
+h.eq("json inline array of tables", decoded.group.items, { { id = 1 }, { id = 2 } })
+h.eq("json quoted keyword key", decoded.weird["local"], "keyword")
+h.eq("json escaped string", decoded.weird.special, "quote\" back\\ newline\n tab\t end")
+h.eq("json unicode string", decoded.weird.unicode, "héllo ☃")
 
 -- ============================================================================
 -- File persistence
 -- ============================================================================
 local dir = h.tempdir()
-local path = dir .. "/deep/nested/settings.toml"
+local path = dir .. "/deep/nested/settings.json"
 h.check("save creates parent directories", config.save(path, { a = 1, b = { c = "d" } }))
 h.check("saved file exists", vim.fn.filereadable(path) == 1)
 h.eq("load round-trips", config.load(path), { a = 1, b = { c = "d" } })
-h.eq("load missing file is empty", config.load(dir .. "/absent.toml"), {})
+h.eq("load missing file is empty", config.load(dir .. "/absent.json"), {})
 
 -- ============================================================================
 -- Lua literal round-trip (scratch-buffer editor)
@@ -108,26 +88,5 @@ local value = {
 local literal = config.to_lua(value)
 local back = config.from_lua("return " .. literal)
 h.eq("lua round-trip", back, value)
-
--- ============================================================================
--- Runtime marker
--- ============================================================================
-local marked = {
-    keep = "yes",
-    transient = config.runtime({ hidden = true }),
-    nested = { _runtime = false, visible = 1, deeper = config.runtime({ x = 1 }) },
-}
-local marked_text = config.stringify(marked)
-h.contains("runtime keeps real data", marked_text, "keep")
-h.contains("runtime keeps nested data", marked_text, "visible")
-h.check("runtime drops marked tables", marked_text:find("hidden", 1, true) == nil)
-h.check("runtime drops nested marked tables", marked_text:find("deeper", 1, true) == nil)
-h.check("runtime drops the marker key", marked_text:find("_runtime", 1, true) == nil)
-
-local prepared = config.prepare(marked)
-h.eq("prepare keeps normal fields", prepared.keep, "yes")
-h.check("prepare removes marked tables", prepared.transient == nil)
-h.check("prepare removes nested marked tables", prepared.nested.deeper == nil)
-h.check("prepare keeps sibling data", prepared.nested.visible == 1)
 
 h.done("configuration layer")

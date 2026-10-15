@@ -1,5 +1,7 @@
 -- OrchLaunch — `.orch` project discovery and scaffolding.
 
+local config = require("orchlaunch.config")
+
 local M = {}
 
 local MARKER = ".orch"
@@ -65,16 +67,16 @@ function M.create(root)
     )
 
     local files = {
-        { "run_configurations.toml", "# OrchLaunch run/debug configurations" },
-        { "external_tools.toml", "# OrchLaunch external tools" },
-        { "toolchain.toml", "# OrchLaunch toolchains" },
-        { "cmake_settings.toml", "# OrchLaunch CMake profiles" },
+        { "run_configurations.json", config.run_configurations() },
+        { "external_tools.json", config.external_tools_config() },
+        { "toolchain.json", config.toolchain_config() },
+        { "cmake_settings.json", { cmake = config.cmake_config() } },
     }
 
     for _, file in ipairs(files) do
         local path = vim.fs.joinpath(dir, file[1])
         if vim.fn.filereadable(path) == 0 then
-            assert(vim.fn.writefile({ file[2], "" }, path) == 0, ("[orchlaunch] failed to create %s"):format(path))
+            assert(config.save(path, file[2]), ("[orchlaunch] failed to create %s"):format(path))
         end
     end
 

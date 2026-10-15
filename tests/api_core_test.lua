@@ -22,8 +22,11 @@ local process = require("orchlaunch.process")
 
 -- 1. create project ---------------------------------------------------------
 assert(project.create(ws) == true, "create returned false")
-for _, f in ipairs({ "run_configurations.toml", "external_tools.toml", "toolchain.toml", "cmake_settings.toml" }) do
+for _, f in ipairs({ "run_configurations.json", "external_tools.json", "toolchain.json", "cmake_settings.json" }) do
     assert(vim.fn.filereadable(ws .. "/.orch/" .. f) == 1, "missing " .. f)
+    -- every scaffolded file is valid JSON
+    local text = table.concat(vim.fn.readfile(ws .. "/.orch/" .. f), "\n")
+    assert(type(vim.json.decode(text)) == "table", "invalid JSON in " .. f)
 end
 ok("project scaffolding")
 
@@ -78,32 +81,39 @@ state.set_cmake_settings(config.cmake_settings({
 
 -- runtime data must stay out of the files
 state.set_runtime("targets", { "game", "engine" })
-state.set_runtime("resolved", config.runtime_target("game", ws .. "/build/game"))
 
 state.save()
 ok("state.save")
 
 -- 4. verify files -----------------------------------------------------------
-local run_text = table.concat(vim.fn.readfile(ws .. "/.orch/run_configurations.toml"), "\n")
-local ext_text = table.concat(vim.fn.readfile(ws .. "/.orch/external_tools.toml"), "\n")
-local tc_text = table.concat(vim.fn.readfile(ws .. "/.orch/toolchain.toml"), "\n")
-local cm_text = table.concat(vim.fn.readfile(ws .. "/.orch/cmake_settings.toml"), "\n")
+local function read_json(rel)
+    local text = table.concat(vim.fn.readfile(ws .. "/.orch/" .. rel), "\n")
+    local ok, doc = pcall(vim.json.decode, text)
+    assert(ok and type(doc) == "table", "invalid JSON in " .. rel .. ": " .. tostring(doc))
+    return doc, text
+end
 
-if not run_text:find("%[%[configurations%]%]") then fail("run: no [[configurations]]\n" .. run_text) end
-if not run_text:find('name = "Game"') then fail("run: Game missing\n" .. run_text) end
-if not run_text:find("%[configurations%.environment%]") then fail("run: environment section missing\n" .. run_text) end
-if not run_text:find('GAME_DEBUG = "1"') then fail("run: env value missing\n" .. run_text) end
-if not run_text:find("%[configurations%.console%]") then fail("run: console section missing\n" .. run_text) end
-if not run_text:find('type = "remote%-debug"') then fail("run: remote-debug missing\n" .. run_text) end
-if not run_text:find('type = "external"') then fail("run: before external spec missing\n" .. run_text) end
-if not ext_text:find("%[%[tools%]%]") then fail("ext: no [[tools]]\n" .. ext_text) end
-if not tc_text:find("%[%[toolchains%]%]") then fail("tc: no [[toolchains]]\n" .. tc_text) end
-if not cm_text:find("%[cmake%]") then fail("cmake: no [cmake]\n" .. cm_text) end
-if not cm_text:find("definitions") then fail("cmake: definitions missing\n" .. cm_text) end
-if run_text:find("_runtime") then fail("run: leaked _runtime") end
-if cm_text:find("targets") then fail("cmake: runtime targets leaked") end
+local run, run_text = read_json("run_configurations.json")
+local ext = read_json("external_tools.json")
+local tc = read_json("toolchain.json")
+local cm, cm_text = read_json("cmake_settings.json")
+
+assert(type(run.configurations) == "table" and #run.configurations == 3, "run: expected 3 configurations")
+local game_cfg = run.configurations[1]
+assert(game_cfg.name == "Game", "run: Game missing")
+assert(game_cfg.environment.GAME_DEBUG == "1", "run: env value missing")
+assert(game_cfg.console.mode == "embedded", "run: console missing")
+assert(game_cfg.before.tools[1] == "build", "run: before build missing")
+assert(type(game_cfg.before.tools[2]) == "table" and game_cfg.before.tools[2].type == "external", "run: before external spec missing")
+assert(run.configurations[2].type == "remote-debug", "run: remote-debug missing")
+assert(type(ext.tools) == "table" and #ext.tools == 1, "ext: tools missing")
+assert(type(tc.toolchains) == "table" and #tc.toolchains == 1, "tc: toolchains missing")
+assert(type(cm.cmake) == "table", "cmake: cmake section missing")
+assert(cm.cmake.profiles[1].definitions.CMAKE_EXPORT_COMPILE_COMMANDS == "ON", "cmake: definitions missing")
+assert(not run_text:find("targets", 1, true), "run: runtime data leaked")
+assert(not cm_text:find("targets", 1, true), "cmake: runtime targets leaked")
 ok("serialized files")
-io.stdout:write("\n----- run_configurations.toml -----\n" .. run_text .. "\n----- cmake_settings.toml -----\n" .. cm_text .. "\n")
+io.stdout:write("\n----- run_configurations.json -----\n" .. run_text .. "\n----- cmake_settings.json -----\n" .. cm_text .. "\n")
 
 -- 5. reload round-trip ------------------------------------------------------
 state.reset()
@@ -121,16 +131,7 @@ assert(state.cmake_settings().build_type == "Debug", "cmake round-trip")
 assert(state.cmake_settings().definitions.CMAKE_EXPORT_COMPILE_COMMANDS == "ON", "cmake def round-trip")
 ok("reload round-trip")
 
--- 6. runtime marker ---------------------------------------------------------
-local doc = { a = 1, rt = config.runtime({ x = 2 }), nested = { _runtime = false, y = 3 } }
-local text = config.stringify(doc)
-assert(text:find("a = 1"), "runtime: a missing")
-assert(text:find("y = 3"), "runtime: nested y missing")
-assert(not text:find("x = 2"), "runtime: hidden table leaked")
-assert(not text:find("_runtime"), "runtime: key leaked")
-ok("runtime marker")
-
--- 7. process -----------------------------------------------------------------
+-- 6. process -----------------------------------------------------------------
 local res = process.run({ program = "echo", args = { "hello" } })
 assert(res.code == 0, "process code " .. tostring(res.code))
 assert((res.stdout or ""):find("hello"), "process stdout: " .. tostring(res.stdout))

@@ -44,18 +44,6 @@
 ---@field tools OrchBeforeTool[]
 
 -- ============================================================================
--- Runtime
--- ============================================================================
-
---- Data produced at runtime (resolved executables, discovered CMake targets…).
----
---- A table carrying `_runtime = true` is excluded entirely from TOML
---- serialization. The `_runtime` key itself is never written.
----@class OrchRuntime
----@field _runtime true
----@field [string] any
-
--- ============================================================================
 -- Run configurations
 -- ============================================================================
 
@@ -96,7 +84,7 @@
 ---| OrchRemoteDebugConfiguration
 ---| OrchCompoundConfiguration
 
---- Contents of `run_configurations.toml`.
+--- Contents of `run_configurations.json`.
 ---@class OrchRunConfigurations
 ---@field configurations OrchRunConfiguration[]
 
@@ -115,7 +103,7 @@
 ---@field environment? OrchEnvironment
 ---@field [string] any
 
---- Contents of `external_tools.toml`.
+--- Contents of `external_tools.json`.
 ---@class OrchExternalToolsConfig
 ---@field tools OrchExternalTool[]
 
@@ -134,7 +122,7 @@
 ---@field debugger string `gdb`/`lldb` or an executable path.
 ---@field [string] any
 
---- Contents of `toolchain.toml`.
+--- Contents of `toolchain.json`.
 ---@class OrchToolchainConfig
 ---@field toolchains OrchToolchain[]
 
@@ -151,7 +139,7 @@
 ---@field kind? "configure"|"build" Set on profiles generated from CMake presets;
 --- when present only `environment`/`name`/`enabled` are editable.
 
---- Contents of `cmake_settings.toml`: the list of profiles plus the active one.
+--- Contents of `cmake_settings.json`: the list of profiles plus the active one.
 ---
 --- `source_dir` names the CMake project (the directory holding `CMakeLists.txt`
 --- and `CMakePresets.json`) independently of the `.orch` project location; it is

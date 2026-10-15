@@ -1,40 +1,24 @@
--- OrchLaunch — TOML I/O, serialization and object factories.
+-- OrchLaunch — JSON I/O, serialization and object factories.
 --
--- This module owns everything related to turning Lua data into TOML and back,
+-- This module owns everything related to turning Lua data into JSON and back,
 -- plus the canonical factories used to build configuration objects. It is
 -- deliberately free of any UI or process logic.
 
 local M = {}
 
 -- ============================================================================
--- TOML backend
+-- JSON backend
 -- ============================================================================
 
---- Returns the available TOML module, or nil when none is installed.
----@return table?
-local function toml()
-    local ok, module = pcall(require, "toml")
-    if not ok or type(module) ~= "table" then
-        return nil
-    end
-    return module
-end
-
---- Requires a TOML parser, raising a helpful error when unavailable.
----@return table
-local function require_toml()
-    local module = toml()
-    assert(module, "[orchlaunch] TOML support requires a `toml` module (wsdjeg/toml.nvim or lua-toml)")
-    return module
-end
+-- Serialization is built on Neovim's built-in `vim.json`: `load` decodes files
+-- and `stringify` produces deterministic, pretty-printed JSON. No external
+-- parser is required.
 
 -- ============================================================================
 -- Serialization helpers
 -- ============================================================================
 
-local BARE_KEY = "^[%w_%-]+$"
-
---- Lua reserved words that cannot be used as bare keys.
+--- Lua reserved words that cannot be used as bare keys in a Lua literal.
 local KEYWORDS = {
     ["and"] = true, ["break"] = true, ["do"] = true, ["else"] = true,
     ["elseif"] = true, ["end"] = true, ["false"] = true, ["for"] = true,
@@ -43,15 +27,6 @@ local KEYWORDS = {
     ["repeat"] = true, ["return"] = true, ["then"] = true, ["true"] = true,
     ["until"] = true, ["while"] = true,
 }
-
---- @param key string
---- @return string
-local function encode_key(key)
-    if key:match(BARE_KEY) then
-        return key
-    end
-    return '"' .. key:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
-end
 
 --- @param value string
 --- @return string
@@ -97,77 +72,35 @@ local function is_array(value)
     return true
 end
 
---- True when `value` is a non-empty array whose items are all tables.
----@param value table
----@return boolean
-local function is_array_of_tables(value)
-    if not is_array(value) then
-        return false
-    end
-
-    for _, item in ipairs(value) do
-        if type(item) ~= "table" or is_array(item) then
-            return false
-        end
-    end
-
-    return true
-end
-
---- Encodes a scalar or inline TOML value.
+--- Encodes a value as pretty-printed JSON with sorted object keys.
+---
+--- Object keys are sorted so output is deterministic and diffs stay small;
+--- array order is preserved. Empty tables encode as `{}` and decode back to an
+--- empty table, which is valid for both arrays and maps in Lua. Scalar escaping
+--- is delegated to `vim.json.encode`.
 ---@param value any
+---@param indent string
 ---@return string
-local function encode_value(value)
-    local kind = type(value)
-
-    if kind == "string" then
-        return encode_string(value)
+local function encode_json(value, indent)
+    if type(value) ~= "table" then
+        return vim.json.encode(value)
     end
 
-    if kind == "number" or kind == "boolean" then
-        return tostring(value)
+    if next(value) == nil then
+        return "{}"
     end
 
-    if kind == "table" then
-        if is_array(value) then
-            local items = {}
-            for _, item in ipairs(value) do
-                items[#items + 1] = encode_value(item)
-            end
-            return "[" .. table.concat(items, ", ") .. "]"
-        end
+    local inner = indent .. "  "
 
-        local keys = {}
-        for key in pairs(value) do
-            keys[#keys + 1] = key
+    if is_array(value) then
+        local items = {}
+        for _, item in ipairs(value) do
+            items[#items + 1] = inner .. encode_json(item, inner)
         end
-        table.sort(keys, function(a, b)
-            return tostring(a) < tostring(b)
-        end)
-
-        local fields = {}
-        for _, key in ipairs(keys) do
-            local child = value[key]
-            -- Empty tables carry no information (as in emit_table); skip them so
-            -- inline values stay readable.
-            if type(child) ~= "table" or next(child) ~= nil then
-                fields[#fields + 1] = encode_key(key) .. " = " .. encode_value(child)
-            end
-        end
-        return "{" .. table.concat(fields, ", ") .. "}"
+        return "[\n" .. table.concat(items, ",\n") .. "\n" .. indent .. "]"
     end
 
-    error(("[orchlaunch] cannot encode TOML value of type %s"):format(kind))
-end
-
---- Emits a table's body into `lines`.
----@param lines string[]
----@param value table
----@param path string Dotted path of the current table ("" at root).
-local function emit_table(lines, value, path)
-    local scalars, subtables, table_arrays = {}, {}, {}
     local keys = {}
-
     for key in pairs(value) do
         keys[#keys + 1] = key
     end
@@ -175,107 +108,18 @@ local function emit_table(lines, value, path)
         return tostring(a) < tostring(b)
     end)
 
+    local fields = {}
     for _, key in ipairs(keys) do
-        local child = value[key]
-        if type(child) == "table" and next(child) == nil then
-            -- Empty tables/arrays carry no information and cannot be
-            -- represented unambiguously in TOML; omit them.
-        elseif type(child) == "table" and not is_array(child) then
-            subtables[#subtables + 1] = key
-        elseif is_array_of_tables(child) then
-            table_arrays[#table_arrays + 1] = key
-        else
-            scalars[#scalars + 1] = key
-        end
+        fields[#fields + 1] = inner .. vim.json.encode(tostring(key)) .. ": " .. encode_json(value[key], inner)
     end
-
-    local function prefix(key)
-        if path == "" then
-            return encode_key(key)
-        end
-        return path .. "." .. encode_key(key)
-    end
-
-    for _, key in ipairs(scalars) do
-        lines[#lines + 1] = encode_key(key) .. " = " .. encode_value(value[key])
-    end
-
-    for _, key in ipairs(subtables) do
-        local child_path = prefix(key)
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "[" .. child_path .. "]"
-        emit_table(lines, value[key], child_path)
-    end
-
-    for _, key in ipairs(table_arrays) do
-        -- Nested arrays-of-tables are emitted inline. Emitting them as
-        -- `[[path]]` sections breaks parsers (notably toml.nvim, and some
-        -- others) when a sibling sub-table follows.
-        if path ~= "" then
-            lines[#lines + 1] = encode_key(key) .. " = " .. encode_value(value[key])
-        else
-            local child_path = prefix(key)
-            for _, item in ipairs(value[key]) do
-                lines[#lines + 1] = ""
-                lines[#lines + 1] = "[[" .. child_path .. "]]"
-                emit_table(lines, item, child_path)
-            end
-        end
-    end
-end
-
---- Encodes a Lua table into TOML using the internal encoder.
----@param data table
----@return string
-local function encode(data)
-    local lines = {}
-    emit_table(lines, data, "")
-
-    -- Trim leading blank lines produced by section headers.
-    while lines[1] == "" do
-        table.remove(lines, 1)
-    end
-
-    return table.concat(lines, "\n") .. "\n"
+    return "{\n" .. table.concat(fields, ",\n") .. "\n" .. indent .. "}"
 end
 
 -- ============================================================================
--- Runtime marker
+-- Public JSON API
 -- ============================================================================
 
---- Recursively prepares a value for serialization.
----
---- Tables marked with `_runtime = true` are dropped completely. The `_runtime`
---- key itself is never emitted. The original value is not modified.
----@param value any
----@return any
-local function prepare(value)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    if value._runtime == true then
-        return nil
-    end
-
-    local result = {}
-    for key, child in pairs(value) do
-        if key ~= "_runtime" then
-            local prepared = prepare(child)
-            if prepared ~= nil then
-                result[key] = prepared
-            end
-        end
-    end
-
-    return result
-end
-
--- ============================================================================
--- Public TOML API
--- ============================================================================
-
---- Parses a TOML file. Missing files yield an empty table.
+--- Parses a JSON file. Missing (or blank) files yield an empty table.
 ---@param path string
 ---@return table
 function M.load(path)
@@ -283,50 +127,32 @@ function M.load(path)
         return {}
     end
 
-    local module = require_toml()
+    local file = assert(io.open(path, "r"), ("[orchlaunch] cannot open %s"):format(path))
+    local content = file:read("*a")
+    file:close()
 
-    local ok, data
-    if type(module.parse_file) == "function" then
-        ok, data = pcall(module.parse_file, path)
-    else
-        local file = assert(io.open(path, "r"), ("[orchlaunch] cannot open %s"):format(path))
-        local content = file:read("*a")
-        file:close()
-        ok, data = pcall(module.parse, content)
+    if content:match("^%s*$") then
+        return {}
     end
 
+    local ok, data = pcall(vim.json.decode, content)
     assert(ok, ("[orchlaunch] failed to parse %s: %s"):format(path, tostring(data)))
 
-    return data or {}
+    if type(data) ~= "table" then
+        return {}
+    end
+
+    return data
 end
 
---- Recursively removes runtime data from `data` (does not mutate it).
----@param data table
----@return table
-function M.prepare(data)
-    return prepare(data) or {}
-end
-
---- Serializes a Lua table into TOML, honoring `_runtime` markers.
+--- Serializes a Lua table into pretty-printed JSON.
 ---@param data table
 ---@return string
 function M.stringify(data)
-    local prepared = prepare(data) or {}
-
-    local module = toml()
-    if module then
-        if type(module.stringify) == "function" then
-            return module.stringify(prepared)
-        end
-        if type(module.encode) == "function" then
-            return module.encode(prepared)
-        end
-    end
-
-    return encode(prepared)
+    return encode_json(data, "") .. "\n"
 end
 
---- Writes a Lua table to a TOML file.
+--- Writes a Lua table to a JSON file.
 ---@param path string
 ---@param data table
 ---@return boolean
@@ -523,32 +349,6 @@ function M.resolve_environment(value, ctx)
         out[key] = M.expand(tostring(item), ctx)
     end
     return out
-end
-
--- ============================================================================
--- Runtime factories
--- ============================================================================
-
---- Wraps `data` in a table excluded from serialization.
----@param data table
----@return OrchRuntime
-function M.runtime(data)
-    assert(type(data) == "table", "runtime data must be a table")
-
-    local result = { _runtime = true }
-    for key, value in pairs(data) do
-        result[key] = value
-    end
-
-    return result
-end
-
---- Runtime CMake target descriptor.
----@param name string
----@param executable? string
----@return OrchRuntime
-function M.runtime_target(name, executable)
-    return M.runtime({ cmake_target = name, executable = executable })
 end
 
 -- ============================================================================

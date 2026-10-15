@@ -1,7 +1,7 @@
 -- OrchLaunch — single loaded project state and the unified access API.
 --
 -- Every other module reads and mutates configurations through this module;
--- none of them parse TOML directly.
+-- none of them parse JSON directly.
 
 local config = require("orchlaunch.config")
 local project = require("orchlaunch.project")
@@ -15,10 +15,10 @@ local state = nil
 ---@return OrchPaths
 local function build_paths(orch_dir)
     return {
-        run_configurations = vim.fs.joinpath(orch_dir, "run_configurations.toml"),
-        external_tools = vim.fs.joinpath(orch_dir, "external_tools.toml"),
-        toolchain = vim.fs.joinpath(orch_dir, "toolchain.toml"),
-        cmake_settings = vim.fs.joinpath(orch_dir, "cmake_settings.toml"),
+        run_configurations = vim.fs.joinpath(orch_dir, "run_configurations.json"),
+        external_tools = vim.fs.joinpath(orch_dir, "external_tools.json"),
+        toolchain = vim.fs.joinpath(orch_dir, "toolchain.json"),
+        cmake_settings = vim.fs.joinpath(orch_dir, "cmake_settings.json"),
     }
 end
 

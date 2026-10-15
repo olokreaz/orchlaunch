@@ -49,9 +49,8 @@ eq(#state.cmake_profiles(), 2, "two profiles")
 
 state.save()
 
--- File is valid TOML and shaped correctly
-local toml = require("toml")
-local parsed = toml.parse(read(root .. "/.orch/cmake_settings.toml"))
+-- File is valid JSON and shaped correctly
+local parsed = vim.json.decode(read(root .. "/.orch/cmake_settings.json"))
 assert(parsed.cmake, "cmake table present")
 eq(parsed.cmake.active, "Release", "active persisted")
 eq(#parsed.cmake.profiles, 2, "profiles persisted")
@@ -86,7 +85,7 @@ eq(state.active_cmake_profile(), "Debug", "active falls back after removal")
 local legacy_root = vim.fn.tempname()
 vim.fn.delete(legacy_root, "rf")
 vim.fn.mkdir(legacy_root .. "/.orch", "p")
-write(legacy_root .. "/.orch/cmake_settings.toml", "[cmake]\ntoolchain = \"Gcc\"\nbuild_dir = \"build\"\ngenerator = \"Ninja\"\n")
+write(legacy_root .. "/.orch/cmake_settings.json", '{"cmake":{"toolchain":"Gcc","build_dir":"build","generator":"Ninja"}}')
 state.setup(legacy_root)
 eq(#state.cmake_profiles(), 1, "legacy wrapped into one profile")
 eq(state.active_cmake_profile(), "Default", "legacy profile named Default")

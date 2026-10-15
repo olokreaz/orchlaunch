@@ -1,33 +1,38 @@
 # OrchLaunch configuration layer
 
-Configuration is split by responsibility. `config.lua` owns TOML I/O,
+Configuration is split by responsibility. `config.lua` owns JSON I/O,
 factories and serialization; `state.lua` owns the single loaded project and
-the API every other module uses. No other module parses TOML directly.
+the API every other module uses. No other module parses JSON directly.
 
 ```text
 .orch/
-├── run_configurations.toml
-├── external_tools.toml
-├── toolchain.toml
-└── cmake_settings.toml
+├── run_configurations.json
+├── external_tools.json
+├── toolchain.json
+└── cmake_settings.json
 ```
 
-## Toolchains — `toolchain.toml`
+## Toolchains — `toolchain.json`
 
-```toml
-[[toolchains]]
-name = "Clang"
-type = "system"
-cmake = "cmake"
-c = "clang"
-cxx = "clang++"
-debugger = "lldb"
+```json
+{
+  "toolchains": [
+    {
+      "name": "Clang",
+      "type": "system",
+      "cmake": "cmake",
+      "c": "clang",
+      "cxx": "clang++",
+      "debugger": "lldb"
+    }
+  ]
+}
 ```
 
 Tool paths may be command names (resolved from `PATH`), absolute paths, or
 paths relative to `.orch`. `gdb` and `lldb` are recognized as debuggers.
 
-## CMake profiles — `cmake_settings.toml`
+## CMake profiles — `cmake_settings.json`
 
 CLion-style CMake profiles: several named ways to configure/build the project,
 each with its own toolchain, presets, generator, directories, args and
@@ -35,34 +40,37 @@ environment. Exactly one profile is active; Run/Debug, the build/install
 before-launch steps and target loading all use it. References a toolchain by
 name; never duplicates compiler paths.
 
-```toml
-[cmake]
-active = "Debug"
-source_dir = "${workspace}/boo"   # optional: the CMake project (see below)
-
-[[cmake.profiles]]
-name = "Debug"
-toolchain = "Clang"
-configure_preset = "debug"
-build_preset = "debug-build"
-test_preset = "tests"
-build_type = "Debug"
-
-[[cmake.profiles]]
-name = "Release"
-toolchain = "Gcc"
-generator = "Ninja"
-build_type = "Release"
-build_dir = "${workspace}/build/release"
-
-[cmake.profiles.definitions]
-CMAKE_EXPORT_COMPILE_COMMANDS = "ON"
+```json
+{
+  "cmake": {
+    "active": "Debug",
+    "source_dir": "${workspace}/boo",
+    "profiles": [
+      {
+        "name": "Debug",
+        "toolchain": "Clang",
+        "configure_preset": "debug",
+        "build_preset": "debug-build",
+        "test_preset": "tests",
+        "build_type": "Debug"
+      },
+      {
+        "name": "Release",
+        "toolchain": "Gcc",
+        "generator": "Ninja",
+        "build_type": "Release",
+        "build_dir": "${workspace}/build/release",
+        "definitions": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+      }
+    ]
+  }
+}
 ```
 
-A legacy flat `[cmake]` table (the single-settings form) is read as one profile
-named `Default`, so existing projects keep working.
+A legacy flat `cmake` object (the single-settings form, without `profiles`) is
+read as one profile named `Default`, so existing projects keep working.
 
-### The CMake project — `[cmake] source_dir`
+### The CMake project — `cmake.source_dir`
 
 `source_dir` is project-wide (not per profile) and names the **CMake project**:
 the directory holding `CMakeLists.txt` and `CMakePresets.json`. It resolves like
@@ -84,7 +92,7 @@ selected.
 ## CMake presets — `CMakePresets.json`
 
 `CMakePresets.json` and `CMakeUserPresets.json` are read from the CMake project
-directory (`[cmake] source_dir`, default the project root).
+directory (`cmake.source_dir`, default the project root).
 `include` directives are followed recursively and presets are resolved through
 `inherits` (dict fields such as `cacheVariables` and `environment` are merged;
 arrays are replaced; `hidden` presets are resolvable but never offered in the
@@ -162,37 +170,41 @@ after the target, its target field is set to that name, and its working
 directory is the CMake build directory. Existing configurations are never
 touched, so this is safe to run repeatedly.
 
-## Run configurations — `run_configurations.toml`
+## Run configurations — `run_configurations.json`
 
 One configuration is used for both Run and Debug. There is no separate
 `Game Debug` entry.
 
-```toml
-[[configurations]]
-name = "Game"
-type = "native"
-target = "game"
-args = ["-dev", "-console"]
-
-[configurations.console]
-mode = "embedded"
-keep_open = true
-clear_on_start = true
-
-[configurations.before]
-tools = ["build", { type = "external", tool = "gen-assets" }]
+```json
+{
+  "configurations": [
+    {
+      "name": "Game",
+      "type": "native",
+      "target": "game",
+      "args": ["-dev", "-console"],
+      "console": { "mode": "embedded", "keep_open": true, "clear_on_start": true },
+      "before": { "tools": ["build", { "type": "external", "tool": "gen-assets" }] }
+    }
+  ]
+}
 ```
 
 Supported types: `native`, `remote-debug`, `compound`.
 
-## External tools — `external_tools.toml`
+## External tools — `external_tools.json`
 
-```toml
-[[tools]]
-name = "gen-assets"
-program = "${workspace}/tools/gen"
-cwd = "${workspace}"
-args = ["--release"]
+```json
+{
+  "tools": [
+    {
+      "name": "gen-assets",
+      "program": "${workspace}/tools/gen",
+      "cwd": "${workspace}",
+      "args": ["--release"]
+    }
+  ]
+}
 ```
 
 ## UI
@@ -229,7 +241,7 @@ use when no name is given.
 | `:OrchLaunchExternalTools` | Manage external tools |
 | `:OrchLaunchExternalTool <name>` | Run an external tool |
 | `:OrchLaunchCMake` | Manage CMake profiles |
-| `:OrchLaunchCMakeProject` | Set the CMake project directory (`[cmake] source_dir`) |
+| `:OrchLaunchCMakeProject` | Set the CMake project directory (`cmake.source_dir`) |
 | `:OrchLaunchImportCMakePresets` | Import CMake presets as disabled profiles |
 | `:OrchLaunchLoadCMake` | Configure the project and load its CMake targets |
 | `:OrchLaunchCreateProject [dir]` | Create a `.orch` project |
@@ -271,8 +283,7 @@ orch.debug("Attach")            -- debug a configuration
 ```
 
 Runtime data (resolved executables, discovered CMake targets) is kept in a
-separate store and marked with `_runtime = true`. Such tables are omitted from
-TOML entirely, and the `_runtime` key is never written.
+separate store (`state.runtime`) that is never serialized to disk.
 
 
 ---
@@ -287,8 +298,8 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 ### Core capabilities
 - Project discovery: `.orch/` directory detection from cwd or given root.
 - Per-project isolated state (run configs, external tools, toolchains, CMake settings).
-- TOML storage with custom encoder/decoder (no encoder in toml.nvim used; nested inline arrays/tables, root arrays as `[[...]]`, keys sorted, empty inline tables omitted).
-- Runtime data separated from persisted data (`_runtime = true`, never serialized; cleared on reload).
+- JSON storage via Neovim's built-in `vim.json` (no external parser): deterministic pretty-printing with sorted object keys; empty tables round-trip.
+- Runtime data separated from persisted data (`state.runtime`, never serialized; cleared on reload).
 - Path resolution: relative paths resolved against `.orch/`, `${workspace}`, `${orch}` expansion via context.
 - Tool resolution: finds executables in PATH or from toolchain.
 - Environment expansion and merge with inheritance.
@@ -301,7 +312,7 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 ### Before-launch steps
 - Build (CMake build) — runs `cmake --build` with active profile/preset or manual settings.
 - Install (CMake install) — runs `cmake --install`.
-- External tool — runs a named external tool from `external_tools.toml`.
+- External tool — runs a named external tool from `external_tools.json`.
 - Custom command — runs an arbitrary program+args with cwd/env.
 
 ### Console modes
@@ -320,8 +331,8 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - Applied only when preset has no `CMAKE_C_COMPILER`/`CMAKE_CXX_COMPILER`/`toolchainFile`.
 
 ### CMake integration
-- Multiple CMake profiles (CLion-style) stored in `cmake_settings.toml`: `[cmake] active = "..."` + `[[cmake.profiles]]` array.
-- Project-wide CMake project directory: `[cmake] source_dir` (defaults to `.orch` root) — directory containing `CMakeLists.txt` and `CMakePresets.json`. Drives -S, cwd, preset discovery, build dir base, and target cache scoping.
+- Multiple CMake profiles (CLion-style) stored in `cmake_settings.json` under `cmake` (`active` + `profiles` array).
+- Project-wide CMake project directory: `cmake.source_dir` (defaults to `.orch` root) — directory containing `CMakeLists.txt` and `CMakePresets.json`. Drives -S, cwd, preset discovery, build dir base, and target cache scoping.
 - Preset-derived profiles: one per visible configure preset and one per visible build preset (disabled by default), created via explicit import (`:OrchLaunchImportCMakePresets` or `i` in manager). Build preset profile stores `build_preset` + resolved `configure_preset`, name disambiguated on collision.
 - Active profile determines effective settings; Set Active enables it automatically.
 - Presets discovery: reads `CMakePresets.json` and `CMakeUserPresets.json` from CMake project directory, follows `include`, resolves `inherits`, merges dict fields (cacheVars/env), replaces arrays, hides `hidden` presets from UI.
@@ -331,7 +342,7 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - Binary dir resolution: from configure preset `binaryDir` (expanded, relative to source_dir) else manual `build_dir` else `<source>/build`.
 - CMake File API target discovery: writes query to `<build>/.cmake/api/v1/query/client-orchlaunch/codemodel-v2` before configure, reads codemodel reply to extract target names/types and artifact paths. Results cached in runtime (`cmake_targets`, `cmake_source_dir`, `cmake_binary_dir`). Cache invalidated on reload, source_dir change, or CMake settings changes.
 - Target resolution for native/remote: prefer File API artifact (absolute/relative resolved), fallback to filesystem search in build dir for common names.
-- Legacy `[cmake]` flat table auto-migrated to single profile named `Default`.
+- Legacy flat `cmake` object auto-migrated to single profile named `Default`.
 
 ### UI (Volt)
 - The whole UI is built on [`nvzone/volt`](https://github.com/nvzone/volt) through a small engine (`ui/kit.lua`) that turns one declarative builder (`UI.n()`) into a floating Volt buffer and exposes the scripting hooks (`get_component_by_id`, `get_focusable_components`, `_save`) used by the tests. Every window shares this single style: `rows`/`columns`/`box` containers, `gap` spacers, `paragraph`/`line`/`text` text and `text_input`/`checkbox`/`select`/`option`/`button` widgets.
@@ -352,7 +363,7 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - `:OrchLaunchExternalTools` — manage external tools
 - `:OrchLaunchExternalTool <name>` — run external tool
 - `:OrchLaunchCMake` — manage CMake profiles
-- `:OrchLaunchCMakeProject` — set CMake project directory ([cmake] source_dir)
+- `:OrchLaunchCMakeProject` — set CMake project directory (cmake.source_dir)
 - `:OrchLaunchImportCMakePresets` — import CMake presets as disabled profiles
 - `:OrchLaunchLoadCMake` — configure and load CMake targets
 

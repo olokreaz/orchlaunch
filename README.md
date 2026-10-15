@@ -6,7 +6,7 @@
 
 A CLion-style **Run/Debug configuration** system for Neovim: named run
 configurations, toolchains, external tools, CMake profiles/presets and CMake
-target discovery — driven from TOML files inside a `.orch` project.
+target discovery — driven from JSON files inside a `.orch` project.
 
 ```
 :OrchLaunch
@@ -40,7 +40,7 @@ target discovery — driven from TOML files inside a `.orch` project.
 - **CMake target discovery** — via the CMake File API (`codemodel-v2`), with
   automatic native run configurations for executable targets.
 - **Run/Debug browser** — a [Volt](https://github.com/nvzone/volt)-based UI for the
-  list, details and every manager, backed by plain TOML on disk.
+  list, details and every manager, backed by plain JSON on disk.
 - **Active configuration** — remembered per project (outside `.orch`).
 
 > Debugging (DAP) integrates with nvim-dap (launch for native, attach for remote-debug). If nvim-dap is not installed, OrchLaunch will notify accordingly.
@@ -49,7 +49,6 @@ target discovery — driven from TOML files inside a `.orch` project.
 
 - Neovim ≥ 0.10 (uses `vim.system`, `vim.json`, `vim.fs`)
 - [volt.nvim](https://github.com/nvzone/volt)
-- [toml.nvim](https://github.com/wsdjeg/toml.nvim) (parsing only)
 - CMake on `PATH` (or configured per toolchain) for the CMake features
 
 ## Installation
@@ -61,7 +60,6 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
   "olokreaz/orchlauncher.nvim.git",
   dependencies = {
     "nvzone/volt",
-    "wsdjeg/toml.nvim",
   },
   config = function()
     require("orchlaunch").setup({ silent = true })
@@ -95,56 +93,64 @@ Then, in the browser:
 4. **New (a)** — add a configuration, pick a target, save with `<C-s>`.
 5. **Run (r)** — run the active/selected configuration.
 
-Everything is stored as TOML under `.orch/`, so it can be reviewed and
+Everything is stored as JSON under `.orch/`, so it can be reviewed and
 committed:
 
 ```text
 .orch/
-├── run_configurations.toml
-├── external_tools.toml
-├── toolchain.toml
-└── cmake_settings.toml
+├── run_configurations.json
+├── external_tools.json
+├── toolchain.json
+└── cmake_settings.json
 ```
 
 ## Configuration files
 
-### Toolchains — `toolchain.toml`
+### Toolchains — `toolchain.json`
 
-```toml
-[[toolchains]]
-name = "Clang"
-type = "system"
-cmake = "cmake"
-c = "clang"
-cxx = "clang++"
-debugger = "lldb"
+```json
+{
+  "toolchains": [
+    {
+      "name": "Clang",
+      "type": "system",
+      "cmake": "cmake",
+      "c": "clang",
+      "cxx": "clang++",
+      "debugger": "lldb"
+    }
+  ]
+}
 ```
 
 Paths may be command names (resolved from `PATH`), absolute paths, or paths
 relative to `.orch`.
 
-### CMake profiles — `cmake_settings.toml`
+### CMake profiles — `cmake_settings.json`
 
-```toml
-[cmake]
-active = "Debug"
-source_dir = "${workspace}/engine"   # optional: the CMake project directory
-
-[[cmake.profiles]]
-name = "Debug"
-toolchain = "Clang"
-configure_preset = "debug"
-build_preset = "debug-build"
-build_type = "Debug"
-
-[[cmake.profiles]]
-name = "Release"
-toolchain = "Gcc"
-generator = "Ninja"
-build_dir = "${workspace}/build/release"
-
-[cmake.profiles.definitions]
-CMAKE_EXPORT_COMPILE_COMMANDS = "ON"
+```json
+{
+  "cmake": {
+    "active": "Debug",
+    "source_dir": "${workspace}/engine",
+    "profiles": [
+      {
+        "name": "Debug",
+        "toolchain": "Clang",
+        "configure_preset": "debug",
+        "build_preset": "debug-build",
+        "build_type": "Debug"
+      },
+      {
+        "name": "Release",
+        "toolchain": "Gcc",
+        "generator": "Ninja",
+        "build_dir": "${workspace}/build/release",
+        "definitions": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+      }
+    ]
+  }
+}
 ```
 
 Exactly one profile is active; Run/Debug, before-launch build/install steps and
@@ -157,36 +163,41 @@ and `CMakePresets.json`), resolved like any path. The configure `-S`,
 working directory, base for a relative `build_dir` and preset discovery all
 follow it.
 
-### Run configurations — `run_configurations.toml`
+### Run configurations — `run_configurations.json`
 
-```toml
-[[configurations]]
-name = "Game"
-type = "native"
-target = "game"                 # CMake target name or executable path
-args = ["-dev", "-console"]
-cwd = "${workspace}/build"
-
-[configurations.console]
-mode = "embedded"               # embedded | hidden | none
-keep_open = true
-clear_on_start = true
-
-[configurations.before]
-tools = ["build", "install", { type = "external", tool = "gen-assets" }]
+```json
+{
+  "configurations": [
+    {
+      "name": "Game",
+      "type": "native",
+      "target": "game",
+      "args": ["-dev", "-console"],
+      "cwd": "${workspace}/build",
+      "console": { "mode": "embedded", "keep_open": true, "clear_on_start": true },
+      "before": { "tools": ["build", "install", { "type": "external", "tool": "gen-assets" }] }
+    }
+  ]
+}
 ```
 
-Supported types: `native`, `remote-debug`, `compound` (runs child
-configurations in order).
+`target` is a CMake target name or an executable path; `console.mode` is
+`embedded`, `hidden` or `none`. Supported types: `native`, `remote-debug`,
+`compound` (runs child configurations in order).
 
-### External tools — `external_tools.toml`
+### External tools — `external_tools.json`
 
-```toml
-[[tools]]
-name = "gen-assets"
-program = "${workspace}/tools/gen"
-cwd = "${workspace}"
-args = ["--release"]
+```json
+{
+  "tools": [
+    {
+      "name": "gen-assets",
+      "program": "${workspace}/tools/gen",
+      "cwd": "${workspace}",
+      "args": ["--release"]
+    }
+  ]
+}
 ```
 
 ## CMake target discovery
@@ -280,7 +291,7 @@ orch.debug("Attach") -- debug a configuration
 orchlauncher.nvim/
 ├── lua/orchlaunch/
 │   ├── init.lua        -- setup() and the public API
-│   ├── config.lua      -- TOML I/O, factories and serialization
+│   ├── config.lua      -- JSON I/O, factories and serialization
 │   ├── state.lua       -- the loaded project and the API every module uses
 │   ├── presets.lua     -- CMakePresets.json resolution
 │   ├── runner.lua      -- run/debug dispatch, before-launch steps
@@ -312,7 +323,7 @@ tests/run.sh
 
 Dependencies are looked up in `stdpath("data")/lazy` (and the other standard
 plugin locations); point `ORCHLAUNCH_DEPS` at a directory containing them
-(`toml.nvim`, `volt`) to override.
+(`volt`) to override.
 
 ## License
 

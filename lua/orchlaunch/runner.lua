@@ -89,7 +89,7 @@ local function run_cmake_step(step, target)
     return true
 end
 
---- Saves the project so `cmake_settings.toml` reflects the current selection.
+--- Saves the project so `cmake_settings.json` reflects the current selection.
 local function ensure_settings_saved()
     pcall(state.save)
 end
