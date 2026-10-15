@@ -354,10 +354,10 @@ function M.renderer(opts)
     })
 
     self:add_mappings({
-        { mode = "n", key = "j", handler = function() self:move_focus(1) end },
-        { mode = "n", key = "<Down>", handler = function() self:move_focus(1) end },
-        { mode = "n", key = "k", handler = function() self:move_focus(-1) end },
-        { mode = "n", key = "<Up>", handler = function() self:move_focus(-1) end },
+        { mode = "n", key = "j", handler = function() self:navigate(1) end },
+        { mode = "n", key = "<Down>", handler = function() self:navigate(1) end },
+        { mode = "n", key = "k", handler = function() self:navigate(-1) end },
+        { mode = "n", key = "<Up>", handler = function() self:navigate(-1) end },
         { mode = "n", key = "<Tab>", handler = function() self:move_focus(1) end },
         { mode = "n", key = "<S-Tab>", handler = function() self:move_focus(-1) end },
         { mode = "n", key = "<CR>", handler = function() self:activate_focused() end },
@@ -421,6 +421,65 @@ function Renderer:move_focus(delta)
     self:redraw()
 end
 
+--- Applies a vertical move: inside a select it changes the highlighted option,
+--- otherwise it moves the focus cursor between widgets.
+--- @param delta integer
+function Renderer:navigate(delta)
+    local component = self.focus_order[self.focus_index]
+    if component and component.kind == "select" and #(component.options or {}) > 0 then
+        self:select_option(delta)
+    else
+        self:move_focus(delta)
+    end
+end
+
+--- Selects an option of `component` by index, firing its change handlers.
+--- @param component table
+--- @param index integer
+--- @param option table
+function Renderer:choose_option(component, index, option)
+    component.focused_index = index
+    component.selected_id = option.id
+    self.focus_id = component.id
+    if component.on_change then
+        pcall(component.on_change, option)
+    end
+    if component.on_select then
+        pcall(component.on_select, option)
+    end
+    self:redraw()
+end
+
+--- Moves the highlighted option of the currently focused select.
+--- @param delta integer
+function Renderer:select_option(delta)
+    local component = self.focus_order[self.focus_index]
+    if not component or component.kind ~= "select" then
+        return
+    end
+
+    local options = component.options or {}
+    if #options == 0 then
+        return
+    end
+
+    local index = component.focused_index or 1
+    if component.selected_id then
+        for i, option in ipairs(options) do
+            if option.id == component.selected_id then
+                index = i
+                break
+            end
+        end
+    end
+
+    local next_index = math.min(math.max(1, index + delta), #options)
+    if next_index == index then
+        return
+    end
+    self:choose_option(component, next_index, options[next_index])
+end
+
 --- Activates the currently focused widget (toggle / edit / select / press).
 function Renderer:activate_focused()
     local component = self.focus_order[self.focus_index]
@@ -434,12 +493,7 @@ function Renderer:activate_focused()
     elseif component.kind == "text_input" then
         self:open_editor(component)
     elseif component.kind == "select" then
-        local options = component.options or {}
-        if #options > 0 then
-            component.focused_index = (component.focused_index % #options) + 1
-            component.selected_id = options[component.focused_index].id
-            self:redraw()
-        end
+        self:select_option(1)
     elseif component.kind == "button" and component.on_press then
         component.on_press(component)
     end
@@ -925,6 +979,8 @@ function Renderer:_do_render()
         local data = resolve(node.props.data) or {}
         if component then
             component.options = data
+            component.on_change = node.props.on_change
+            component.on_select = node.props.on_select
         end
 
         local focused = component and component:get_focused_node() or nil
@@ -940,15 +996,7 @@ function Renderer:_do_render()
                 if component then
                     local captured = option
                     marks[#marks][3] = function()
-                        component.focused_index = i
-                        component.selected_id = captured.id
-                        if node.props.on_change then
-                            pcall(node.props.on_change, captured)
-                        end
-                        if node.props.on_select then
-                            pcall(node.props.on_select, captured)
-                        end
-                        self:redraw()
+                        self:choose_option(component, i, captured)
                     end
                 end
                 lines[#lines + 1] = fit_marks(marks, width)
