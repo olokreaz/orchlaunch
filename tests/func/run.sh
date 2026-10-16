@@ -159,7 +159,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. <Esc> leaves the field back to the canvas (focus returns to the root)
+# 3. <S-Tab> cycles back to the previous field (insert) — crossing a dropdown
+# ---------------------------------------------------------------------------
+win_prev="$win_after"
+truncate_log
+send BTab
+sleep 0.6
+send F6
+sleep 0.3
+probe="$(tail -1 "$LOG" | grep '^probe ' || true)"
+win_back="$(printf '%s' "$probe" | sed -n 's/.* win=\([0-9]*\).*/\1/p')"
+b_mode="$(printf '%s' "$probe" | sed -n 's/.* mode=\([a-z]*\).*/\1/p')"
+if [ -n "$win_back" ] && [ "$win_back" != "$win_prev" ] && [ "$b_mode" = "i" ]; then
+    report_pass "S-Tab cycles back to the previous field (insert)"
+else
+    report_fail "S-Tab cycles back to the previous field (insert) [before=$win_prev after=$win_back probe=$probe]"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. <Esc> leaves the field back to the canvas (focus returns to the root)
 # ---------------------------------------------------------------------------
 truncate_log
 send Escape
@@ -175,7 +193,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. q closes the editor from the canvas
+# 5. q closes the editor from the canvas
 # ---------------------------------------------------------------------------
 sendl "q"
 sleep 0.6

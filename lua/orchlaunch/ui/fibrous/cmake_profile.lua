@@ -453,16 +453,68 @@ function M.open(existing, on_saved, opts)
     -- Subwindow floats and their buffers are recreated on every render, so these
     -- buffer-local maps are (re)applied from an autocmd, guarded by a buffer flag
     -- so re-application never clobbers anything the user refined once set.
-    local function field_cycle(key, enter)
-        dlog(("cycle key=%s mode=%s win=%d"):format(key, vim.api.nvim_get_mode().mode, vim.api.nvim_get_current_win()))
+    local field_cells
+
+    -- Move to the next/previous field and dive in. We enumerate the field
+    -- cells once, step by index from the field under the cursor, then move the
+    -- root cursor onto the target cell and let fibrous' `i` enter it. Going via
+    -- the cell (rather than fibrous' cursor-parity cycle) is what makes a
+    -- dropdown reachable: the cell comes from fibrous.targets, which reports the
+    -- input's real cell — not the `[▾` mark the plain cycle parks on.
+    local function field_cycle(dir, enter)
+        local focused = vim.api.nvim_get_current_win() ~= handle.winid
         vim.cmd("stopinsert")
-        if vim.api.nvim_win_is_valid(handle.winid) then
+        if not vim.api.nvim_win_is_valid(handle.winid) then
+            return
+        end
+        vim.api.nvim_set_current_win(handle.winid)
+        local cur = vim.api.nvim_win_get_cursor(handle.winid)
+        local crow, ccol = cur[1] - 1, cur[2]
+        local cells = field_cells()
+        -- fibrous.targets lists only the widgets shown in the root mirror, so
+        -- the field we are leaving is missing while it is focused. The root
+        -- cursor still sits on its cell (entering never moved it), so splice it
+        -- back in to keep the step aligned.
+        if focused then
+            cells[#cells + 1] = { row = crow, col = ccol }
+            local seen, uniq = {}, {}
+            for _, cell in ipairs(cells) do
+                local k = cell.row .. ":" .. cell.col
+                if not seen[k] then
+                    seen[k] = true
+                    uniq[#uniq + 1] = cell
+                end
+            end
+            cells = uniq
+            table.sort(cells, function(a, b)
+                if a.row ~= b.row then
+                    return a.row < b.row
+                end
+                return a.col < b.col
+            end)
+        end
+        if #cells == 0 then
+            return
+        end
+        local idx, best = 1, math.huge
+        for i, cell in ipairs(cells) do
+            local d = math.abs(cell.row - crow) + math.abs(cell.col - ccol)
+            if d < best then
+                idx, best = i, d
+            end
+        end
+        local target = cells[((idx - 1 + dir) % #cells) + 1]
+        dlog(("cycle dir=%d focused=%s cells=%d cur=%d,%d idx=%d target=%d,%d"):format(dir, tostring(focused), #cells, crow, ccol, idx, target.row, target.col))
+        vim.schedule(function()
+            if not vim.api.nvim_win_is_valid(handle.winid) then
+                return
+            end
             vim.api.nvim_set_current_win(handle.winid)
-        end
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), "m", false)
-        if enter then
-            vim.api.nvim_feedkeys("i", "m", false)
-        end
+            vim.api.nvim_win_set_cursor(handle.winid, { target.row + 1, target.col })
+            if enter then
+                vim.api.nvim_feedkeys("i", "m", false)
+            end
+        end)
     end
 
     local function field_leave()
@@ -473,29 +525,23 @@ function M.open(existing, on_saved, opts)
         end
     end
 
-    -- Field cells are read out of fibrous itself: its <Tab> traversal parks the
-    -- root cursor exactly on each interactive node's cell, so we cycle through
-    -- the stops once, record where the cursor lands, and restore it. Public
-    -- behaviour only, and it stays correct as the form re-renders.
-    local function field_cells()
+    -- Field cells come straight from fibrous.targets: the interactive geometry
+    -- it exposes (and shapes for flash.nvim) reports each widget's real cursor
+    -- cell in the window currently displaying it — the root mirror for every
+    -- unfocused field. Sorted top-to-bottom / left-to-right that is the form's
+    -- reading order, and it stays correct as the form re-renders.
+    field_cells = function()
         if not vim.api.nvim_win_is_valid(handle.winid) then
             return {}
         end
-        local saved = vim.api.nvim_win_get_cursor(handle.winid)
-        vim.api.nvim_win_set_cursor(handle.winid, { 1, 0 })
-        local tab = vim.api.nvim_replace_termcodes("<Tab>", true, false, true)
-        local cells, seen = {}, {}
-        for _ = 1, 64 do
-            vim.api.nvim_feedkeys(tab, "mx", false)
-            local c = vim.api.nvim_win_get_cursor(handle.winid)
-            local key = c[1] .. ":" .. c[2]
-            if seen[key] then
-                break
-            end
-            seen[key] = true
-            cells[#cells + 1] = { row = c[1] - 1, col = c[2] }
+        local ok, list = pcall(require("fibrous.targets").targets, { winid = handle.winid })
+        if not ok or type(list) ~= "table" then
+            return {}
         end
-        pcall(vim.api.nvim_win_set_cursor, handle.winid, saved)
+        local cells = {}
+        for _, t in ipairs(list) do
+            cells[#cells + 1] = { row = t.pos[1] - 1, col = t.pos[2] }
+        end
         table.sort(cells, function(a, b)
             if a.row ~= b.row then
                 return a.row < b.row
@@ -557,16 +603,16 @@ function M.open(existing, on_saved, opts)
                     dlog(("map buf=%d lines=%d"):format(buf, vim.api.nvim_buf_line_count(buf)))
                     for _, mode in ipairs({ "n", "i" }) do
                         vim.keymap.set(mode, "<Tab>", function()
-                            field_cycle("<Tab>", true)
+                            field_cycle(1, true)
                         end, { buffer = buf, nowait = true, silent = true })
                         vim.keymap.set(mode, "<S-Tab>", function()
-                            field_cycle("<S-Tab>", true)
+                            field_cycle(-1, true)
                         end, { buffer = buf, nowait = true, silent = true })
                         vim.keymap.set(mode, "<C-j>", function()
-                            field_cycle("<Tab>", true)
+                            field_cycle(1, true)
                         end, { buffer = buf, nowait = true, silent = true })
                         vim.keymap.set(mode, "<C-k>", function()
-                            field_cycle("<S-Tab>", true)
+                            field_cycle(-1, true)
                         end, { buffer = buf, nowait = true, silent = true })
                     end
                     vim.keymap.set("i", "<Esc>", function()
