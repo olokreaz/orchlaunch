@@ -1,29 +1,23 @@
--- OrchLaunch — CMake profile editor reimplemented on fibrous.
+-- OrchLaunch — CMake profile editor on fibrous.
 --
--- Prototype on purpose: the kit/Volt editor stays in place as the fallback (and
--- for the kit list dialog), while this module is the fibrous take on the same
--- form so the two stacks can be compared. `M.available()` reports whether
--- fibrous is installed; `open` falls back to the kit editor when it is not.
---
--- Manual profiles own every build setting; a new profile starts from sane
+-- A manual profile owns every build setting; a new profile starts from sane
 -- defaults (generator = Ninja, build type = Debug). Preset-derived profiles
--- (those with `kind`) are read-only and only expose their preset description.
+-- (those with `kind`) are read-only and only show their preset description.
+-- The kit editor backs it when fibrous is not installed.
+--
+-- The form scaffolding (state, save/close, field navigation, flash jump) comes
+-- from `orchlaunch.ui.fibrous.form`; this module only describes the layout,
+-- the collect/save pair and the `.orch` test hooks.
 
 local UI = require("orchlaunch.ui")
-
-local ERROR = vim.log.levels.ERROR
-local WARN = vim.log.levels.WARN
-
--- Flash-style jump: label each field with a letter and hop straight to it. The
--- labels are drawn as overlay virt_text on the canvas, so they need a namespace
--- (module-level: one namespace serves every editor instance).
-local flash_ns = vim.api.nvim_create_namespace("orchlaunch_fibrous_flash")
+local form = require("orchlaunch.ui.fibrous.form")
+local util = require("orchlaunch.ui.fibrous.util")
 
 local M = {}
 
 --- @return boolean
 function M.available()
-    return (pcall(require, "fibrous")) == true
+    return util.available()
 end
 
 --- Common CMake generators offered in the generator dropdown.
@@ -62,6 +56,7 @@ local function trimmed(value)
     return value ~= "" and value or nil
 end
 
+--- @param list string[]
 --- @param current? string
 --- @return string[]
 local function with_current(list, current)
@@ -141,33 +136,24 @@ local MANUAL_FIELDS = {
     { id = "environment", kind = "env", height = 4 },
 }
 
+--- Field metadata keyed by id, for the two-column layout below.
+local MANUAL_BY_ID = {}
+for _, def in ipairs(MANUAL_FIELDS) do
+    MANUAL_BY_ID[def.id] = def
+end
+
 --- Opens the fibrous CMake profile editor.
 --- @param existing? OrchCMakeProfile
 --- @param on_saved? function
 --- @param opts? table
 --- @return table handle
 function M.open(existing, on_saved, opts)
-    local ok, nr = pcall(require, "fibrous")
-    if not ok then
+    if not util.available() then
         return require("orchlaunch.ui.editors.cmake_profile").open(existing, on_saved, opts)
     end
 
-    local ui = nr.ui
+    local ui = require("fibrous").ui
     local state = require("orchlaunch.state")
-
-    -- Opt-in trace for the functional suite (tests/func): when ORCH_FUNC_LOG is
-    -- set, key handling and map application are recorded there. No-op otherwise.
-    local trace = vim.env.ORCH_FUNC_LOG
-    local function dlog(line)
-        if not trace then
-            return
-        end
-        local f = io.open(trace, "a")
-        if f then
-            f:write("module " .. line .. "\n")
-            f:close()
-        end
-    end
 
     existing = existing or {}
     local readonly = existing.kind ~= nil
@@ -196,6 +182,9 @@ function M.open(existing, on_saved, opts)
     if readonly then
         for _, id in ipairs({ "name", "kind", "configure_preset", "build_preset", "test_preset", "package_preset", "workflow_preset", "environment" }) do
             fields_meta[#fields_meta + 1] = { id = id, kind = id == "environment" and "env" or "string", readonly = true }
+            if initial[id] == nil and existing[id] ~= nil then
+                initial[id] = tostring(existing[id])
+            end
         end
     else
         for _, def in ipairs(MANUAL_FIELDS) do
@@ -203,506 +192,129 @@ function M.open(existing, on_saved, opts)
         end
     end
 
-    local form --- state handle, assigned on first render
-    local handle
-    local closed = false
-    local mapped = {}
-
-    --- @param id string
-    --- @return string? value
-    local function get(id)
-        return form and (form.get() or {})[id]
-    end
-
-    --- @param id string
-    --- @param value string
-    local function set(id, value)
-        if not form then
-            return
-        end
-        form.set(vim.tbl_extend("force", form.get() or {}, { [id] = value }))
-    end
-
-    local function cleanup()
-        for _, m in ipairs(mapped) do
-            pcall(vim.keymap.del, m[1], m[2])
-        end
-        mapped = {}
-        pcall(vim.api.nvim_del_augroup_by_name, "OrchlaunchFibrousProfileEditor")
-    end
-
-    local function close()
-        cleanup()
-        if not closed and handle then
-            closed = true
-            handle.unmount()
-        end
-    end
-
-    local function collect()
-        local name = vim.trim(get("name") or "")
-        if name == "" then
-            error("a profile name is required", 0)
-        end
-
-        local clash = state.cmake_profile(name)
-        if clash and (original_name == nil or clash.name ~= original_name) then
-            error(("a profile named %q already exists"):format(name), 0)
-        end
-
-        local toolchain = get("toolchain")
-        if toolchain == "(none)" then
-            toolchain = nil
-        end
-
-        local profile = {
-            name = name,
-            toolchain = trimmed(toolchain),
-            generator = trimmed(get("generator")),
-            build_type = trimmed(get("build_type")),
-            build_dir = trimmed(get("build_dir")),
-            install_dir = trimmed(get("install_dir")),
-            configure_args = UI.lines(get("configure_args")),
-            build_args = UI.lines(get("build_args")),
-            install_args = UI.lines(get("install_args")),
-            definitions = UI.parse_env(get("definitions")),
-            environment = UI.parse_env(get("environment")),
-        }
-
-        for _, key in ipairs(PRESERVED_KEYS) do
-            if existing[key] ~= nil then
-                profile[key] = existing[key]
-            end
-        end
-
-        return profile
-    end
-
-    local function save()
-        if readonly then
-            UI.notify("imported from CMakePresets.json — nothing to save", WARN)
-            return
-        end
-
-        local ok_save, profile = pcall(collect)
-        if not ok_save then
-            UI.notify(tostring(profile), ERROR)
-            if handle then
-                handle.focus()
-            end
-            return
-        end
-
-        if original_name then
-            state.update_cmake_profile(original_name, profile)
-        else
-            state.add_cmake_profile(profile)
-        end
-        state.save()
-        close()
-    end
-
-    local title_text = function(name)
-        return ("  CMake profile: %s"):format(name ~= "" and name or "new")
-    end
-
-    local function editor(ctx)
-        form = form or ctx.use_state(initial)
-        local v = form.get() or {}
-
-        local function field_label(text, node)
-            return {
-                comp = ui.row,
-                props = { gap = 1, align = "start" },
-                children = {
-                    { comp = ui.label, props = { text = text, width = 16, style = { text_hl = "Comment" } } },
-                    node,
-                },
-            }
-        end
-
-        local function text_field(def)
-            return {
-                comp = ui.text_input,
-                props = {
-                    value = initial[def.id],
-                    height = def.height or 1,
-                    singleline = def.singleline or false,
-                    grow = 1,
-                    style = { border = "rounded" },
-                    on_change = function(value)
-                        set(def.id, value)
-                    end,
-                },
-            }
-        end
-
-        local function select_field(def, options)
-            -- The dropdown itself is one row tall; a 3-row wrapper keeps the two
-            -- columns' section headings aligned with the bordered text fields.
-            return {
-                comp = ui.col,
-                props = { grow = 1, height = 3, align = "start", justify = "start" },
-                children = {
-                    {
-                        comp = ui.dropdown,
-                        props = {
-                            options = options,
-                            value = initial[def.id],
-                            width = 24,
-                            on_select = function(value)
-                                set(def.id, value)
-                            end,
-                        },
-                    },
-                },
-            }
-        end
-
-        local function heading(text)
-            return { comp = ui.label, props = { text = " " .. text, style = { text_hl = "Title" } } }
-        end
-
-        if readonly then
-            return {
-                comp = ui.col,
-                props = { grow = 1, gap = 0, style = { padding = { x = 1, y = 1 } } },
-                children = {
-                    { comp = ui.label, props = { text = title_text(existing.name or ""), align_self = "center", style = { text_hl = "Title" } } },
-                    { comp = ui.label, props = { text = table.concat(preset_lines(state, existing), "\n"), grow = 1 } },
-                    { comp = ui.label, props = { text = "  q/<Esc>  Close  ", align_self = "center", style = { text_hl = "Comment" } } },
-                },
-            }
-        end
-
-        local left = {
-            comp = ui.col,
-            props = { grow = 1, gap = 1 },
-            children = {
-                heading("Profile"),
-                field_label("Name", text_field(MANUAL_FIELDS[1])),
-                heading("Build"),
-                field_label("Generator", select_field(MANUAL_FIELDS[3], with_current(GENERATORS, initial.generator))),
-                field_label("Build type", select_field(MANUAL_FIELDS[4], with_current(BUILD_TYPES, initial.build_type))),
-                field_label("Build dir", text_field(MANUAL_FIELDS[5])),
-                field_label("Install dir", text_field(MANUAL_FIELDS[6])),
-            },
-        }
-
-        local right = {
-            comp = ui.col,
-            props = { grow = 1, gap = 1 },
-            children = {
-                heading("Toolchain"),
-                field_label("Toolchain", select_field(MANUAL_FIELDS[2], toolchain_options)),
-                heading("Arguments"),
-                field_label("Configure", text_field(MANUAL_FIELDS[7])),
-                field_label("Build", text_field(MANUAL_FIELDS[8])),
-                field_label("Install", text_field(MANUAL_FIELDS[9])),
-                heading("Variables"),
-                field_label("Definitions", text_field(MANUAL_FIELDS[10])),
-                field_label("Environment", text_field(MANUAL_FIELDS[11])),
-            },
-        }
-
-        return {
-            comp = ui.col,
-            props = { grow = 1, gap = 0, style = { padding = { x = 1 } } },
-            children = {
-                { comp = ui.label, props = { text = title_text(v.name or ""), align_self = "center", style = { text_hl = "Title" } } },
-                { comp = ui.row, props = { grow = 1, gap = 3 }, children = { left, right } },
-                { comp = ui.label, props = { text = "  <C-s> Save  ·  Tab/s field  ·  ↑↓ pick  ·  Enter ok  ·  q/<Esc> close  ", align_self = "center", style = { text_hl = "Comment" } } },
-            },
-        }
-    end
-
-    local mount_opts = { zindex = 50 }
-    local function apply_size()
-        mount_opts.width = math.max(80, math.min(vim.o.columns - 4, 120))
-        mount_opts.height = math.max(20, math.min(vim.o.lines - 4, 36))
-    end
-
-    apply_size()
-    mount_opts.on_unmount = function()
-        cleanup()
-        if on_saved then
-            on_saved()
-        end
-    end
-    handle = nr.mount(editor, {}, mount_opts)
-    handle.focus()
-
-    for _, m in ipairs({ { "n", "q", close }, { "n", "<C-s>", save } }) do
-        mapped[#mapped + 1] = m
-        vim.keymap.set(m[1], m[2], function()
-            m[3]()
-        end, { nowait = true, silent = true })
-    end
-    vim.keymap.set("n", "<Esc>", close, { buffer = handle.bufnr, nowait = true, silent = true })
-
-    -- fibrous owns canvas traversal: its own <Tab>/<S-Tab> park the cursor on the
-    -- next/previous interactive node, and <CR>/`i` dive in. On top of that we
-    -- make the form feel continuous:
-    --   * <Tab>/<S-Tab>/<C-j>/<C-k> INSIDE a field pop back to the canvas, cycle
-    --     to the next/previous stop and enter it ready to type;
-    --   * a single <Esc> in a single-line field leaves it (multiline fields keep
-    --     the native second-<Esc> so normal editing inside them still works);
-    --   * ui.dropdown only navigates its popup with <C-n>/<C-p>, so the arrow
-    --     keys are aliased to those on dropdown buffers.
-    --
-    -- Subwindow floats and their buffers are recreated on every render, so these
-    -- buffer-local maps are (re)applied from an autocmd, guarded by a buffer flag
-    -- so re-application never clobbers anything the user refined once set.
-    local field_cells
-
-    -- Move to the next/previous field and dive in. We enumerate the field
-    -- cells once, step by index from the field under the cursor, then move the
-    -- root cursor onto the target cell and let fibrous' `i` enter it. Going via
-    -- the cell (rather than fibrous' cursor-parity cycle) is what makes a
-    -- dropdown reachable: the cell comes from fibrous.targets, which reports the
-    -- input's real cell — not the `[▾` mark the plain cycle parks on.
-    local function field_cycle(dir, enter)
-        local focused = vim.api.nvim_get_current_win() ~= handle.winid
-        vim.cmd("stopinsert")
-        if not vim.api.nvim_win_is_valid(handle.winid) then
-            return
-        end
-        vim.api.nvim_set_current_win(handle.winid)
-        local cur = vim.api.nvim_win_get_cursor(handle.winid)
-        local crow, ccol = cur[1] - 1, cur[2]
-        local cells = field_cells()
-        -- fibrous.targets lists only the widgets shown in the root mirror, so
-        -- the field we are leaving is missing while it is focused. The root
-        -- cursor still sits on its cell (entering never moved it), so splice it
-        -- back in to keep the step aligned.
-        if focused then
-            cells[#cells + 1] = { row = crow, col = ccol }
-            local seen, uniq = {}, {}
-            for _, cell in ipairs(cells) do
-                local k = cell.row .. ":" .. cell.col
-                if not seen[k] then
-                    seen[k] = true
-                    uniq[#uniq + 1] = cell
-                end
-            end
-            cells = uniq
-            table.sort(cells, function(a, b)
-                if a.row ~= b.row then
-                    return a.row < b.row
-                end
-                return a.col < b.col
-            end)
-        end
-        if #cells == 0 then
-            return
-        end
-        local idx, best = 1, math.huge
-        for i, cell in ipairs(cells) do
-            local d = math.abs(cell.row - crow) + math.abs(cell.col - ccol)
-            if d < best then
-                idx, best = i, d
-            end
-        end
-        local target = cells[((idx - 1 + dir) % #cells) + 1]
-        dlog(("cycle dir=%d focused=%s cells=%d cur=%d,%d idx=%d target=%d,%d"):format(dir, tostring(focused), #cells, crow, ccol, idx, target.row, target.col))
-        vim.schedule(function()
-            if not vim.api.nvim_win_is_valid(handle.winid) then
-                return
-            end
-            vim.api.nvim_set_current_win(handle.winid)
-            vim.api.nvim_win_set_cursor(handle.winid, { target.row + 1, target.col })
-            if enter then
-                vim.api.nvim_feedkeys("i", "m", false)
-            end
-        end)
-    end
-
-    local function field_leave()
-        dlog(("leave mode=%s win=%d"):format(vim.api.nvim_get_mode().mode, vim.api.nvim_get_current_win()))
-        vim.cmd("stopinsert")
-        if vim.api.nvim_win_is_valid(handle.winid) then
-            vim.api.nvim_set_current_win(handle.winid)
-        end
-    end
-
-    -- Field cells come straight from fibrous.targets: the interactive geometry
-    -- it exposes (and shapes for flash.nvim) reports each widget's real cursor
-    -- cell in the window currently displaying it — the root mirror for every
-    -- unfocused field. Sorted top-to-bottom / left-to-right that is the form's
-    -- reading order, and it stays correct as the form re-renders.
-    field_cells = function()
-        if not vim.api.nvim_win_is_valid(handle.winid) then
-            return {}
-        end
-        local ok, list = pcall(require("fibrous.targets").targets, { winid = handle.winid })
-        if not ok or type(list) ~= "table" then
-            return {}
-        end
-        local cells = {}
-        for _, t in ipairs(list) do
-            cells[#cells + 1] = { row = t.pos[1] - 1, col = t.pos[2] }
-        end
-        table.sort(cells, function(a, b)
-            if a.row ~= b.row then
-                return a.row < b.row
-            end
-            return a.col < b.col
-        end)
-        return cells
-    end
-
-    -- Flash jump: overlay a letter on every field, read one key, hop there and
-    -- start typing. Labels are home-row-first; `s` triggers it (also from a
-    -- field's normal mode, which first leaves the field).
-    local FLASH_LETTERS = "asdfghjklqwertyuiopzxcvbnm"
-    local flash_hl = false
-    local function flash()
-        local cells = field_cells()
-        if #cells == 0 then
-            return
-        end
-        if not flash_hl then
-            flash_hl = true
-            vim.api.nvim_set_hl(0, "OrchlaunchFlash", { bold = true, reverse = true })
-        end
-        local target = {}
-        for i, cell in ipairs(cells) do
-            local ch = FLASH_LETTERS:sub(i, i)
-            if ch == "" then
-                break
-            end
-            target[ch] = cell
-            vim.api.nvim_buf_set_extmark(handle.bufnr, flash_ns, cell.row, cell.col, {
-                virt_text = { { ch, "OrchlaunchFlash" } },
-                virt_text_pos = "overlay",
-                priority = 1000,
-            })
-        end
-        vim.cmd("redraw")
-        local ok, ch = pcall(vim.fn.getcharstr)
-        vim.api.nvim_buf_clear_namespace(handle.bufnr, flash_ns, 0, -1)
-        vim.cmd("redraw")
-        if not ok or ch == "" then
-            return
-        end
-        local cell = target[ch]
-        if not cell then
-            return
-        end
-        vim.api.nvim_set_current_win(handle.winid)
-        vim.api.nvim_win_set_cursor(handle.winid, { cell.row + 1, cell.col })
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("i", true, false, true), "m", false)
-    end
-
-    local function wire_field_keys()
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-            if vim.w[win].fibrous_anchor == handle.winid then
-                local buf = vim.api.nvim_win_get_buf(win)
-                if not vim.b[buf].orchlaunch_field_keys then
-                    vim.b[buf].orchlaunch_field_keys = true
-                    dlog(("map buf=%d lines=%d"):format(buf, vim.api.nvim_buf_line_count(buf)))
-                    for _, mode in ipairs({ "n", "i" }) do
-                        vim.keymap.set(mode, "<Tab>", function()
-                            field_cycle(1, true)
-                        end, { buffer = buf, nowait = true, silent = true })
-                        vim.keymap.set(mode, "<S-Tab>", function()
-                            field_cycle(-1, true)
-                        end, { buffer = buf, nowait = true, silent = true })
-                        vim.keymap.set(mode, "<C-j>", function()
-                            field_cycle(1, true)
-                        end, { buffer = buf, nowait = true, silent = true })
-                        vim.keymap.set(mode, "<C-k>", function()
-                            field_cycle(-1, true)
-                        end, { buffer = buf, nowait = true, silent = true })
-                    end
-                    vim.keymap.set("i", "<Esc>", function()
-                        if vim.api.nvim_buf_line_count(buf) > 1 then
-                            vim.api.nvim_feedkeys(
-                                vim.api.nvim_replace_termcodes("<Esc>", true, false, true),
-                                "n",
-                                false
-                            )
-                        else
-                            field_leave()
-                        end
-                    end, { buffer = buf, nowait = true, silent = true })
-                    vim.keymap.set("n", "s", function()
-                        field_leave()
-                        flash()
-                    end, { buffer = buf, nowait = true, silent = true })
-                end
-                local is_dropdown = false
-                for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
-                    if m.lhs == "<C-n>" or m.lhs == "<C-N>" then
-                        is_dropdown = true
-                        break
-                    end
-                end
-                if is_dropdown and not vim.b[buf].orchlaunch_arrow_alias then
-                    vim.b[buf].orchlaunch_arrow_alias = true
-                    for _, mode in ipairs({ "n", "i" }) do
-                        vim.keymap.set(mode, "<Down>", function()
-                            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-n>", true, false, true), "m", false)
-                        end, { buffer = buf, nowait = true, silent = true })
-                        vim.keymap.set(mode, "<Up>", function()
-                            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-p>", true, false, true), "m", false)
-                        end, { buffer = buf, nowait = true, silent = true })
-                    end
-                end
-            end
-        end
-    end
-    wire_field_keys()
-    vim.schedule(wire_field_keys)
-    vim.api.nvim_create_autocmd({ "BufWinEnter", "WinNew", "BufEnter", "WinEnter" }, {
-        group = vim.api.nvim_create_augroup("OrchlaunchFibrousProfileFields", { clear = true }),
-        callback = wire_field_keys,
-    })
-    vim.keymap.set("n", "s", flash, { buffer = handle.bufnr, nowait = true, silent = true })
-
-    vim.api.nvim_create_autocmd("VimResized", {
-        group = vim.api.nvim_create_augroup("OrchlaunchFibrousProfileEditor", { clear = true }),
-        callback = function()
-            apply_size()
-            if handle then
-                handle.relayout()
-            end
-        end,
-    })
-
-    handle.orch = {
+    return form.open({
+        augroup = "OrchlaunchFibrousProfileEditor",
         readonly = readonly,
-        fields = fields_meta,
-        values = setmetatable({}, {
-            __index = function(_, key)
-                return get(key)
-            end,
-        }),
-        refresh = function()
-            if handle then
-                handle.relayout()
-            end
+        on_saved = on_saved,
+        size = function(o)
+            o.width = math.max(80, math.min(vim.o.columns - 4, 120))
+            o.height = math.max(20, math.min(vim.o.lines - 4, 36))
         end,
-        focus = function()
-            if handle then
-                handle.focus()
-            end
+        title = function(values)
+            local name = vim.trim(values.name or "")
+            return ("  CMake profile: %s"):format(name ~= "" and name or "new")
         end,
-        save = save,
-        close = close,
-        get = get,
-        set = set,
-        _field_cells = field_cells,
-        index_of = function(id)
-            for index, field in ipairs(fields_meta) do
-                if field.id == id then
-                    return index
+        initial = initial,
+        render = function(_, f)
+            if readonly then
+                return {
+                    comp = ui.col,
+                    props = { grow = 1, gap = 0, style = { padding = { x = 1, y = 1 } } },
+                    children = {
+                        f.centered(f.title()),
+                        { comp = ui.label, props = { text = table.concat(preset_lines(state, existing), "\n"), grow = 1 } },
+                        f.footer("q/<Esc>  Close"),
+                    },
+                }
+            end
+
+            local left = {
+                comp = ui.col,
+                props = { grow = 1, gap = 1 },
+                children = {
+                    f.heading("Profile"),
+                    f.field_label("Name", f.text("name", { height = 3, singleline = true, grow = 1 })),
+                    f.heading("Build"),
+                    f.field_label("Generator", f.select("generator", with_current(GENERATORS, initial.generator))),
+                    f.field_label("Build type", f.select("build_type", with_current(BUILD_TYPES, initial.build_type))),
+                    f.field_label("Build dir", f.text("build_dir", { height = 3, singleline = true, grow = 1 })),
+                    f.field_label("Install dir", f.text("install_dir", { height = 3, singleline = true, grow = 1 })),
+                },
+            }
+
+            local right = {
+                comp = ui.col,
+                props = { grow = 1, gap = 1 },
+                children = {
+                    f.heading("Toolchain"),
+                    f.field_label("Toolchain", f.select("toolchain", toolchain_options)),
+                    f.heading("Arguments"),
+                    f.field_label("Configure", f.text("configure_args", { height = 4, grow = 1 })),
+                    f.field_label("Build", f.text("build_args", { height = 4, grow = 1 })),
+                    f.field_label("Install", f.text("install_args", { height = 4, grow = 1 })),
+                    f.heading("Variables"),
+                    f.field_label("Definitions", f.text("definitions", { height = 4, grow = 1 })),
+                    f.field_label("Environment", f.text("environment", { height = 4, grow = 1 })),
+                },
+            }
+
+            return {
+                comp = ui.col,
+                props = { grow = 1, gap = 0, style = { padding = { x = 1 } } },
+                children = {
+                    f.centered(f.title()),
+                    { comp = ui.row, props = { grow = 1, gap = 3 }, children = { left, right } },
+                    f.footer("<C-s> Save  ·  Tab/s field  ·  ↑↓ pick  ·  Enter ok  ·  q/<Esc> close"),
+                },
+            }
+        end,
+        collect = function(values)
+            local name = vim.trim(values.name or "")
+            if name == "" then
+                error("a profile name is required")
+            end
+
+            local clash = state.cmake_profile(name)
+            if clash and (original_name == nil or clash.name ~= original_name) then
+                error(("a profile named %q already exists"):format(name))
+            end
+
+            local toolchain = values.toolchain
+            if toolchain == "(none)" then
+                toolchain = nil
+            end
+
+            local profile = {
+                name = name,
+                toolchain = trimmed(toolchain),
+                generator = trimmed(values.generator),
+                build_type = trimmed(values.build_type),
+                build_dir = trimmed(values.build_dir),
+                install_dir = trimmed(values.install_dir),
+                configure_args = UI.lines(values.configure_args),
+                build_args = UI.lines(values.build_args),
+                install_args = UI.lines(values.install_args),
+                definitions = UI.parse_env(values.definitions),
+                environment = UI.parse_env(values.environment),
+            }
+
+            for _, key in ipairs(PRESERVED_KEYS) do
+                if existing[key] ~= nil then
+                    profile[key] = existing[key]
                 end
             end
-        end,
-    }
 
-    return handle
+            return profile
+        end,
+        save = function(profile)
+            if original_name then
+                state.update_cmake_profile(original_name, profile)
+            else
+                state.add_cmake_profile(profile)
+            end
+        end,
+        attach = function(handle, api)
+            handle.orch = {
+                readonly = readonly,
+                fields = fields_meta,
+                values = api.values,
+                set = api.set,
+                save = api.save,
+                close = api.close,
+                _field_cells = api.cells,
+            }
+        end,
+    })
 end
 
 return M

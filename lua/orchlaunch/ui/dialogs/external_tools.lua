@@ -1,14 +1,15 @@
 -- OrchLaunch — external tools list dialog.
-
-local list = require("orchlaunch.ui.dialogs.list")
+--
+-- Engine-agnostic spec, rendered on fibrous when installed and on the kit
+-- engine otherwise.
 
 local M = {}
 
 function M.open()
     local state = require("orchlaunch.state")
-    local editor = require("orchlaunch.ui.editors.external_tool")
+    local editor = require("orchlaunch.ui.fibrous.editors.external_tool")
 
-    return list.open({
+    local spec = {
         title = "External Tools",
         new_label = " New tool (a) ",
         items = function()
@@ -27,9 +28,17 @@ function M.open()
             }, "\n")
         end,
         find = state.external_tool,
-        open = editor.open,
         remove = state.remove_external_tool,
-    })
+        open = function(existing, on_saved)
+            return editor.open(existing, on_saved)
+        end,
+    }
+
+    local fibrous = require("orchlaunch.ui.fibrous.list")
+    if fibrous.available() then
+        return fibrous.open(spec)
+    end
+    return require("orchlaunch.ui.dialogs.list").open(spec)
 end
 
 return M

@@ -95,6 +95,11 @@ end
 -- ============================================================================
 
 function M.open()
+    local fibrous = require("orchlaunch.ui.fibrous.browser")
+    if fibrous.available() then
+        return fibrous.open()
+    end
+
     local state = require("orchlaunch.state")
     local active = require("orchlaunch.active")
     local native_editor = require("orchlaunch.ui.editors.native")

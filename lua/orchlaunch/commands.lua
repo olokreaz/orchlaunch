@@ -80,11 +80,11 @@ local function edit_configuration(name)
     end
 
     if cfg.type == "native" then
-        require("orchlaunch.ui.editors.native").open(cfg)
+        require("orchlaunch.ui.fibrous.editors.native").open(cfg)
     elseif cfg.type == "remote-debug" then
-        require("orchlaunch.ui.editors.remote").open(cfg)
+        require("orchlaunch.ui.fibrous.editors.remote").open(cfg)
     elseif cfg.type == "compound" then
-        require("orchlaunch.ui.editors.compound").open(cfg)
+        require("orchlaunch.ui.fibrous.editors.compound").open(cfg)
     else
         notify(("cannot edit unknown configuration type: %s"):format(cfg.type), ERROR)
     end
@@ -233,7 +233,7 @@ function M.register()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.ui.editors.cmake_project").open()
+        require("orchlaunch.ui.fibrous.editors.cmake_project").open()
     end, { desc = "Set the CMake project directory" })
 
     vim.api.nvim_create_user_command("OrchLaunchImportCMakePresets", function()

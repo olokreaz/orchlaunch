@@ -1,14 +1,16 @@
 -- OrchLaunch — toolchains list dialog.
-
-local list = require("orchlaunch.ui.dialogs.list")
+--
+-- The screen is engine-agnostic: a spec over the list dialog, rendered on
+-- fibrous when it is installed and on the kit engine otherwise. The editor it
+-- opens makes the same choice internally.
 
 local M = {}
 
 function M.open()
     local state = require("orchlaunch.state")
-    local editor = require("orchlaunch.ui.editors.toolchain")
+    local editor = require("orchlaunch.ui.fibrous.editors.toolchain")
 
-    return list.open({
+    local spec = {
         title = "Toolchains",
         new_label = " New chain (a) ",
         items = function()
@@ -28,9 +30,17 @@ function M.open()
             }, "\n")
         end,
         find = state.toolchain,
-        open = editor.open,
         remove = state.remove_toolchain,
-    })
+        open = function(existing, on_saved)
+            return editor.open(existing, on_saved)
+        end,
+    }
+
+    local fibrous = require("orchlaunch.ui.fibrous.list")
+    if fibrous.available() then
+        return fibrous.open(spec)
+    end
+    return require("orchlaunch.ui.dialogs.list").open(spec)
 end
 
 return M
