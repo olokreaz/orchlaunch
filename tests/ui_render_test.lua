@@ -2,6 +2,9 @@ local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
 require("harness")
 
+-- Kit/Volt render smoke test: bypass the fibrous dispatch even when installed.
+vim.g.orchlaunch_use_fibrous = false
+
 local messages = {}
 local original_notify = vim.notify
 vim.notify = function(msg, ...)

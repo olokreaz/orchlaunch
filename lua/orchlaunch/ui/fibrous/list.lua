@@ -161,6 +161,8 @@ function M.open(spec)
         end
     end
 
+    local mount_opts = { zindex = 50 }
+
     local function Body(ctx)
         revision = ctx.use_state(0)
         if not selected then
@@ -212,7 +214,7 @@ function M.open(spec)
             hints[#hints + 1] = "A  Set Active"
         end
         if spec.import then
-            hints[#hints + 1] = "i  Import"
+            hints[#hints + 1] = "i  Import presets"
         end
         if spec.project then
             hints[#hints + 1] = "p  Project"
@@ -225,9 +227,10 @@ function M.open(spec)
         end
 
         local hint_lines, line = {}, ""
+        local hint_max = (mount_opts.width or vim.o.columns) - 10
         for _, part in ipairs(hints) do
             local candidate = (#line == 0) and part or (line .. "    " .. part)
-            if #line > 0 and vim.fn.strwidth(candidate) > 100 then
+            if #line > 0 and vim.fn.strwidth(candidate) > hint_max then
                 hint_lines[#hint_lines + 1] = line
                 line = part
             else
@@ -275,7 +278,6 @@ function M.open(spec)
         }
     end
 
-    local mount_opts = { zindex = 50 }
     local function apply_size()
         util.apply_size(mount_opts, 0.75, 0.8, 80, math.huge, 20, 36)
     end

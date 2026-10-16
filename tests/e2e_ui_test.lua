@@ -8,6 +8,10 @@ local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
 local h = require("harness")
 
+-- This suite drives the Volt/kit engine's renderer API directly, so it must use
+-- the kit implementations even when fibrous happens to be installed.
+vim.g.orchlaunch_use_fibrous = false
+
 local notifications = {}
 vim.notify = function(msg)
     notifications[#notifications + 1] = tostring(msg)
