@@ -73,7 +73,7 @@ for _, field in ipairs(popup.orch.fields or {}) do
 end
 
 check("has name field", fields.name)
-check("has enabled field", fields.enabled)
+check("has no enabled field", not fields.enabled)
 check("has toolchain select", fields.toolchain)
 check("has generator select", fields.generator)
 check("has build_type select", fields.build_type)
@@ -82,14 +82,6 @@ check("has environment field", fields.environment)
 check("has no preset fields", not (fields.configure_preset or fields.build_preset or fields.test_preset or fields.package_preset or fields.workflow_preset))
 check("new profile defaults to Ninja", popup.orch.values.generator == "Ninja", tostring(popup.orch.values.generator))
 check("new profile defaults to Debug", popup.orch.values.build_type == "Debug", tostring(popup.orch.values.build_type))
-
--- toggling a boolean through `activate` updates the value
-local enabled_index = popup.orch.index_of("enabled")
-local before_toggle = popup.orch.values.enabled
-popup.orch.activate(popup.orch.fields[enabled_index])
-check("activate toggles boolean", popup.orch.values.enabled ~= before_toggle)
-popup.orch.activate(popup.orch.fields[enabled_index])
-check("activate toggles back", popup.orch.values.enabled == before_toggle)
 
 -- string field wiring
 popup.orch.set("build_dir", "build/ninja")
@@ -166,7 +158,6 @@ dup.orch.close(false)
 -- ============================================================================
 state.add_cmake_profile({
     name = "PresetDebug",
-    enabled = true,
     kind = "configure",
     configure_preset = "debug",
 })

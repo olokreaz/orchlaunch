@@ -95,7 +95,7 @@ h.eq("sync imports configure+build profiles", state.sync_cmake_profiles(), 3)
 h.eq("import is idempotent", state.sync_cmake_profiles(), 0)
 h.check("imported configure profile", state.cmake_profile("e2e-debug") ~= nil)
 h.eq("imported profile kind", state.cmake_profile("e2e-debug").kind, "configure")
-h.eq("imported profile disabled", state.cmake_profile("e2e-debug").enabled, false)
+h.eq("imported profiles inert", state.active_cmake_profile(), nil)
 h.eq("imported build profile configurePreset", state.cmake_profile("e2e-build").configure_preset, "e2e-debug")
 
 -- Active profile wiring all three presets (as a user would build manually).

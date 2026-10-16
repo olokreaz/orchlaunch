@@ -19,15 +19,13 @@ function M.open()
         label = function(item)
             local active = state.active_cmake_profile()
             local marker = item.name == active and "● " or "  "
-            local off = item.enabled == false and "  (off)" or ""
             local kind = item.kind and ("  <" .. item.kind .. ">") or ""
-            return ("%s%s%s%s"):format(marker, item.name, kind, off)
+            return ("%s%s%s"):format(marker, item.name, kind)
         end,
         details = function(item)
             local active = state.active_cmake_profile()
             local lines = {
                 ("Name:  %s%s"):format(item.name, item.name == active and "  (active)" or ""),
-                ("Enabled:  %s"):format(item.enabled == false and "no" or "yes"),
                 ("Source:  %s"):format(item.kind or "manual"),
             }
 
@@ -53,9 +51,6 @@ function M.open()
         set_active = function(name)
             state.set_active_cmake_profile(name)
             state.save()
-        end,
-        toggle = function(name)
-            state.toggle_cmake_profile(name)
         end,
         import = function()
             return state.sync_cmake_profiles()

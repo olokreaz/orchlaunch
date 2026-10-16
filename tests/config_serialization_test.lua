@@ -79,7 +79,7 @@ h.eq("load missing file is empty", config.load(dir .. "/absent.json"), {})
 -- ============================================================================
 local value = {
     name = "Profile",
-    enabled = true,
+    flag = true,
     args = { "a", "b" },
     environment = { K = "v", ["local"] = "kw" },
     nested = { deep = { level = 3 } },

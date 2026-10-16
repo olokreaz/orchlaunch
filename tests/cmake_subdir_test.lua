@@ -42,7 +42,6 @@ state.add_toolchain(config.toolchain({ name = "Gcc", type = "system", cmake = "c
 
 state.add_cmake_profile({
     name = "Boo",
-    enabled = true,
     configure_preset = "boo-debug",
 })
 state.set_active_cmake_profile("Boo")

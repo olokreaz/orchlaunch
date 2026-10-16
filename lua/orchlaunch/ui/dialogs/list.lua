@@ -22,7 +22,6 @@ local M = {}
 --- @field open fun(existing: table?, on_saved: fun())
 --- @field remove fun(name: string)
 --- @field set_active? fun(name: string) Marks a row as the active one.
---- @field toggle? fun(name: string) Toggles a row on/off.
 --- @field import? fun(): integer Imports items, returning how many were added.
 --- @field project? fun(on_saved: fun()) Opens a project-wide editor.
 --- @field solo? boolean Close this list while editing, then reopen it.
@@ -117,17 +116,6 @@ function M.open(spec)
         refresh_list()
     end
 
-    local function toggle_item()
-        local name = selected_name()
-        if not name or not spec.find(name) then
-            UI.notify("no item selected", ERROR)
-            return
-        end
-        spec.toggle(name)
-        state.save()
-        refresh_list()
-    end
-
     local function import_items()
         local added = spec.import()
         state.save()
@@ -163,15 +151,6 @@ function M.open(spec)
             handler = function()
                 if spec.set_active then
                     set_active()
-                end
-            end,
-        },
-        {
-            mode = "n",
-            key = "t",
-            handler = function()
-                if spec.toggle then
-                    toggle_item()
                 end
             end,
         },
@@ -237,9 +216,6 @@ function M.open(spec)
 
         if spec.set_active then
             parts[#parts + 1] = "A  Set Active"
-        end
-        if spec.toggle then
-            parts[#parts + 1] = "t  Toggle"
         end
         if spec.import then
             parts[#parts + 1] = "i  Import presets"

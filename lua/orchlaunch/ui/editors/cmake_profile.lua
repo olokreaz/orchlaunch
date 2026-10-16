@@ -178,7 +178,6 @@ function M.open(existing, on_saved, opts)
     local fields = readonly
             and {
                 { id = "name", label = "Name", kind = "string", readonly = true },
-                { id = "enabled", label = "Enabled", kind = "bool", readonly = true },
                 { id = "kind", label = "Imported from", kind = "string", readonly = true },
                 { id = "configure_preset", label = "Configure preset", kind = "string", readonly = true },
                 { id = "build_preset", label = "Build preset", kind = "string", readonly = true },
@@ -189,7 +188,6 @@ function M.open(existing, on_saved, opts)
             }
         or {
             { id = "name", label = "Name", kind = "string" },
-            { id = "enabled", label = "Enabled", kind = "bool" },
             { id = "toolchain", label = "Toolchain", kind = "select" },
             { id = "generator", label = "Generator", kind = "select" },
             { id = "build_type", label = "Build type", kind = "select" },
@@ -257,15 +255,6 @@ function M.open(existing, on_saved, opts)
         })
     end
 
-    local function check(id, label, value, on_change)
-        return n.checkbox({
-            id = id,
-            label = label,
-            value = value == true,
-            on_change = on_change or function() end,
-        })
-    end
-
     local function select(id, label, items, value)
         local nodes = {}
         for _, item in ipairs(items) do
@@ -303,9 +292,6 @@ function M.open(existing, on_saved, opts)
 
         local value = component:get_current_value()
 
-        if kind == "bool" then
-            return value == true
-        end
         if kind == "select" then
             return type(value) == "table" and value.id or value
         end
@@ -357,7 +343,6 @@ function M.open(existing, on_saved, opts)
 
         local profile = {
             name = name,
-            enabled = read_field("enabled") == true,
             toolchain = trimmed(read_field("toolchain")),
             generator = trimmed(read_field("generator")),
             build_type = trimmed(read_field("build_type")),
@@ -425,8 +410,6 @@ function M.open(existing, on_saved, opts)
             bits[#bits + 1] = "toolchain " .. toolchain
         end
 
-        bits[#bits + 1] = read_field("enabled") == true and "enabled" or "disabled"
-
         return "  " .. table.concat(bits, "  ·  ")
     end
 
@@ -465,8 +448,6 @@ function M.open(existing, on_saved, opts)
                     refresh_summary()
                 end,
             }),
-            n.gap(1),
-            check("enabled", " Enabled", existing.enabled ~= false, refresh_summary),
             n.gap(1),
             heading("Build"),
             select(
@@ -602,9 +583,7 @@ function M.open(existing, on_saved, opts)
                 return
             end
 
-            if kind == "bool" then
-                component:set_current_value(value == true)
-            elseif kind == "select" then
+            if kind == "select" then
                 component:set_current_value({ id = value })
             else
                 component:set_current_value(value or "")
@@ -628,11 +607,6 @@ function M.open(existing, on_saved, opts)
             end
 
             local component = renderer:get_component_by_id(field.id)
-            if field.kind == "bool" and component then
-                component:set_current_value(not (component:get_current_value() == true))
-                refresh_summary()
-                return
-            end
             if component then
                 component:focus()
             end

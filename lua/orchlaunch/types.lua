@@ -132,12 +132,11 @@
 
 --- A named CMake profile — one way of loading/configuring the project, in the
 --- spirit of CLion's CMake profiles. Several profiles may coexist; exactly one
---- is active at a time and only enabled profiles are used for builds.
+--- is active at a time and only the active profile is used for builds.
 ---@class OrchCMakeProfile : OrchCMakeSettings
 ---@field name string Profile name (also used as its identity).
----@field enabled? boolean Disabled profiles are ignored (default: enabled).
 ---@field kind? "configure"|"build" Set on profiles generated from CMake presets;
---- when present only `environment`/`name`/`enabled` are editable.
+--- when present only `environment`/`name` are editable.
 
 --- Contents of `cmake_settings.json`: the list of profiles plus the active one.
 ---

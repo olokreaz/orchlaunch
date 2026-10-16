@@ -223,34 +223,20 @@ function M.cmake_profiles()
     return M.get().cmake.profiles
 end
 
---- Name of the active CMake profile (first defined when none is marked).
+--- Name of the active CMake profile, or nil when none is marked active.
 ---@return string?
 function M.active_cmake_profile()
     local doc = M.get().cmake
-    if find_by_name(doc.profiles, doc.active) then
-        return doc.active
-    end
-    return doc.profiles[1] and doc.profiles[1].name or nil
+    local profile = find_by_name(doc.profiles, doc.active)
+    return profile and profile.name or nil
 end
 
---- The effective CMake settings: the active profile when it is enabled, else
---- the first enabled profile, else an empty table (built-in defaults).
+--- The effective CMake settings: the active profile, else an empty table
+--- (built-in defaults). Exactly one profile is active at a time.
 ---@return OrchCMakeProfile
 function M.cmake_settings()
     local doc = M.get().cmake
-    local active = find_by_name(doc.profiles, doc.active)
-
-    if active and active.enabled ~= false then
-        return active
-    end
-
-    for _, profile in ipairs(doc.profiles) do
-        if profile.enabled ~= false then
-            return profile
-        end
-    end
-
-    return {}
+    return find_by_name(doc.profiles, doc.active) or {}
 end
 
 --- The directory that CMake operates on: the project-wide `source_dir`
@@ -282,27 +268,10 @@ function M.set_cmake_source_dir(value)
     return value
 end
 
---- True when `profile` participates in builds (enabled unless explicitly off).
----@param profile? OrchCMakeProfile
----@return boolean
-function M.cmake_profile_enabled(profile)
-    return profile ~= nil and profile.enabled ~= false
-end
-
 ---@param name string
 ---@return OrchCMakeProfile?
 function M.cmake_profile(name)
     return find_by_name(M.get().cmake.profiles, name)
-end
-
----@param name string
----@return OrchCMakeProfile
-function M.toggle_cmake_profile(name)
-    local profile = M.cmake_profile(name)
-    assert(profile, ("[orchlaunch] CMake profile not found: %s"):format(name))
-    profile.enabled = not (profile.enabled ~= false)
-    M.get().runtime.presets = nil
-    return profile
 end
 
 ---@param name string
@@ -312,7 +281,6 @@ function M.set_active_cmake_profile(name)
     local profile = find_by_name(doc.profiles, name)
     assert(profile, ("[orchlaunch] CMake profile not found: %s"):format(name))
     doc.active = name
-    profile.enabled = true
     M.get().runtime.presets = nil
     return M.cmake_settings()
 end
@@ -386,7 +354,6 @@ function M.sync_cmake_profiles()
             doc.profiles[#doc.profiles + 1] = {
                 name = preset.name,
                 kind = "configure",
-                enabled = false,
                 configure_preset = preset.name,
             }
             added = added + 1
@@ -400,7 +367,6 @@ function M.sync_cmake_profiles()
             doc.profiles[#doc.profiles + 1] = {
                 name = existing and free_name(preset.name) or preset.name,
                 kind = "build",
-                enabled = false,
                 configure_preset = resolved.configurePreset,
                 build_preset = preset.name,
             }

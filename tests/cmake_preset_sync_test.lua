@@ -46,7 +46,6 @@ eq(#state.cmake_profiles(), 4, "four profiles")
 
 local debug = state.cmake_profile("debug")
 eq(debug.kind, "configure", "debug is a configure profile")
-eq(debug.enabled, false, "imported profile is disabled by default")
 eq(debug.configure_preset, "debug", "configure preset set")
 
 local debug_build = state.cmake_profile("debug-build")
@@ -57,26 +56,25 @@ eq(debug_build.configure_preset, "debug", "build profile knows its configure pre
 -- Second import adds nothing
 eq(state.sync_cmake_profiles(), 0, "second import is a no-op")
 
--- Disabled profiles are ignored
-eq(state.cmake_settings(), {}, "no enabled profile -> empty settings")
+-- Imported profiles stay inert until one is marked active
+eq(state.active_cmake_profile(), nil, "nothing active right after import")
+eq(state.cmake_settings(), {}, "no active profile -> empty settings")
 
--- Toggle enables
-state.toggle_cmake_profile("debug")
-eq(state.cmake_settings().name, "debug", "enabled profile becomes effective")
+-- Set active
+state.set_active_cmake_profile("debug")
+eq(state.cmake_settings().name, "debug", "active profile becomes effective")
 eq(cmake.binary_dir(), root .. "/build/debug", "binary_dir from configure preset")
 
--- Set active enables and switches
+-- Switching the active profile
 state.set_active_cmake_profile("release")
 eq(state.active_cmake_profile(), "release", "active switched")
-eq(state.cmake_profile("release").enabled, true, "set active enables")
 eq(cmake.binary_dir(), root .. "/build/release", "binary_dir follows active")
 
--- Save / reload keeps flags and kind
+-- Save / reload keeps kind and the active marker
 state.save()
 state.reload()
 eq(state.cmake_profile("debug").kind, "configure", "kind persisted")
-eq(state.cmake_profile("debug").enabled, true, "enabled persisted")
-eq(state.cmake_profile("debug-build").enabled, false, "disabled persisted")
+eq(state.active_cmake_profile(), "release", "active persisted")
 
 -- Preset-derived profiles are read-only: they are imported from the preset
 -- JSON files and cannot be edited (or created) through the editor.
