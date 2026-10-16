@@ -71,31 +71,121 @@ function M.scopes(frame_id)
     return state.scopes_by_frame[fid] or {}
 end
 
-function M.variables(ref)
+--- @param v table
+--- @return table
+local function normalize_variable(v)
+    return {
+        name = v.name,
+        value = v.value,
+        type = v.type,
+        variablesReference = v.variablesReference,
+        indexedVariables = v.indexedVariables,
+        namedVariables = v.namedVariables,
+    }
+end
+
+--- @return table? session The active nvim-dap session, if any.
+local function current_session()
+    local d = get_dap()
+    if not d or type(d.session) ~= "function" then
+        return nil
+    end
+    return d.session()
+end
+
+--- Returns the children of a variables reference.
+---
+--- Served from the cache when the reference was fetched before; otherwise the
+--- request is sent to the debug adapter and cached once the answer arrives. When
+--- `cb` is given it receives the (possibly empty) list of variables.
+---@param ref? integer
+---@param cb? fun(vars: table[])
+---@return table[]
+function M.variables(ref, cb)
     if ref == nil then
         return {}
     end
-    return state.vars_by_ref[ref] or {}
+
+    local cached = state.vars_by_ref[ref]
+    if cached then
+        if cb then
+            cb(cached)
+        end
+        return cached
+    end
+
+    local session = current_session()
+    if not session then
+        return {}
+    end
+
+    session:request("variables", { variablesReference = ref }, function(err, response)
+        if err then
+            return
+        end
+        local vars = {}
+        for _, v in ipairs(response and response.variables or {}) do
+            vars[#vars + 1] = normalize_variable(v)
+        end
+        state.vars_by_ref[ref] = vars
+        if cb then
+            cb(vars)
+        end
+    end)
+
+    return {}
 end
 
-function M.evaluate(expr)
+--- Evaluates `expr` in the context of the current frame.
+---
+--- Delegates to the adapter's `evaluate` request and forwards the result string
+--- to `cb`. Falls back to the repl when no session is active.
+---@param expr string
+---@param cb? fun(result: string?, response: table?)
+function M.evaluate(expr, cb)
     local d = get_dap()
     if not d then
         error("nvim-dap not available")
     end
-    -- request via dap.repl.execute or session
-    if d.session and d.session.current_frame and expr then
-        -- simplest: use repl
-        d.repl.execute(expr)
+
+    local session = current_session()
+    if not session then
+        if d.repl and d.repl.execute then
+            d.repl.execute(expr)
+        end
+        return
     end
+
+    local args = { expression = expr, context = "repl" }
+    if state.current_frame then
+        args.frameId = state.current_frame.id
+    end
+
+    session:request("evaluate", args, function(err, response)
+        if err or not response then
+            return
+        end
+        if cb then
+            cb(response.result, response)
+        end
+    end)
 end
 
+local listeners_attached = false
+
 function M.attach_listeners()
+    if listeners_attached then
+        return
+    end
+
     local d = get_dap()
     if not d then
         return
     end
-    -- minimal event wiring; store references by id
+    listeners_attached = true
+
+    -- minimal event wiring; attached exactly once so repeated sessions do not
+    -- pile up duplicate listeners
     d.listeners.after.event_stopped = d.listeners.after.event_stopped or {}
     table.insert(d.listeners.after.event_stopped, function(session, body)
         state.status = "stopped"
@@ -160,23 +250,6 @@ function M.attach_listeners()
                 })
             end
             state.scopes_by_frame[fid] = scopes
-        end
-    end)
-    d.listeners.after.event_variables = d.listeners.after.event_variables or {}
-    table.insert(d.listeners.after.event_variables, function(session, body)
-        if body and body.variables and body.variablesReference then
-            local vars = {}
-            for _, v in ipairs(body.variables) do
-                table.insert(vars, {
-                    name = v.name,
-                    value = v.value,
-                    type = v.type,
-                    variablesReference = v.variablesReference,
-                    indexedVariables = v.indexedVariables,
-                    namedVariables = v.namedVariables,
-                })
-            end
-            state.vars_by_ref[body.variablesReference] = vars
         end
     end)
 end

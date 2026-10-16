@@ -13,6 +13,9 @@ local M = {}
 local WARN = vim.log.levels.WARN
 local ERROR = vim.log.levels.ERROR
 
+-- Synchronous build/tool steps must not hang a Neovim session forever.
+local DEFAULT_TIMEOUT_MS = 15 * 60 * 1000
+
 --- @param message string
 --- @param level? integer
 local function notify(message, level)
@@ -34,6 +37,7 @@ local function tool_spec(tool)
         env = state.resolve_environment(tool.environment),
         inherit_env = tool.inherit_env ~= false,
         sudo = tool.sudo == true,
+        timeout = tool.timeout or DEFAULT_TIMEOUT_MS,
     }
 end
 
@@ -53,6 +57,7 @@ end
 ---@param spec OrchProcessSpec
 ---@return boolean
 local function run_cmake_spec(label, spec)
+    spec.timeout = spec.timeout or DEFAULT_TIMEOUT_MS
     local result = process.run(spec)
 
     if result.code ~= 0 then
@@ -176,6 +181,9 @@ local function launch_native(name, mode)
         if not run_before(cfg.before) then
             return
         end
+        if cfg.sudo then
+            notify(("configuration %q requests sudo; debug adapters cannot elevate"):format(name), WARN)
+        end
         local target = cfg.target
         local program = state.resolve_path(target)
         local looks_like_path = target:find("[/\\]") ~= nil or vim.fn.filereadable(program or "") == 1
@@ -265,6 +273,9 @@ local function launch_remote_debug(name, mode)
     end
 
     local cfg = state.require_configuration(name)
+    if not run_before(cfg.before) then
+        return
+    end
     local dbg = require("orchlaunch.debug")
     dbg.start(cfg, { type = "attach", connection = cfg.connection, program = cfg.symbol })
 end

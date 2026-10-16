@@ -139,10 +139,19 @@ end
 -- ============================================================================
 
 --- Loads the `.orch` project that contains `root` (or the current directory).
+---
+--- When `orch_dir` is already known (e.g. resolved by a previous `locate`
+--- call) it can be passed to skip the directory walk.
 ---@param root? string
+---@param orch_dir? string
 ---@return OrchState
-function M.setup(root)
-    local found, orch_dir = project.locate(root)
+function M.setup(root, orch_dir)
+    local found
+    if orch_dir then
+        found = vim.fs.dirname(orch_dir)
+    else
+        found, orch_dir = project.locate(root)
+    end
     assert(found and orch_dir, "[orchlaunch] no .orch project found")
 
     local paths = build_paths(orch_dir)

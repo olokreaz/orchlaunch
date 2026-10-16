@@ -61,6 +61,10 @@ local function build_options(spec)
         opts.clear_env = true
     end
 
+    if type(spec.timeout) == "number" and spec.timeout > 0 then
+        opts.timeout = spec.timeout
+    end
+
     return opts
 end
 

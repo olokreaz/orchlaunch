@@ -590,14 +590,30 @@ function M.find_target(target)
     end
 
     local candidates = { target, target .. ".exe", "lib" .. target .. ".so", "lib" .. target .. ".a" }
+    local wanted = {}
     for _, candidate in ipairs(candidates) do
-        local found = vim.fs.find(function(name)
-            return name == candidate
-        end, { path = dir, type = "file", limit = 1 })
+        wanted[candidate] = true
+    end
 
-        if found[1] then
-            return found[1]
+    -- Breadth-first walk so a match in the build root wins over one nested
+    -- deeper (e.g. `bin/`, `Debug/`, `CMakeFiles/...`).
+    local queue = { dir }
+    local level = 0
+    while #queue > 0 and level < 8 do
+        local next_queue = {}
+        for _, current in ipairs(queue) do
+            for name, kind in vim.fs.dir(current) do
+                local full = vim.fs.joinpath(current, name)
+                if kind == "file" and wanted[name] and vim.fn.filereadable(full) == 1 then
+                    return full
+                end
+                if kind == "directory" then
+                    next_queue[#next_queue + 1] = full
+                end
+            end
         end
+        queue = next_queue
+        level = level + 1
     end
 
     return nil

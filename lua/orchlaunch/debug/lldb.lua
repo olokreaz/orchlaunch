@@ -1,6 +1,25 @@
 -- Backend for lldb-dap
 local M = {}
 
+--- Resolves the lldb debug adapter executable.
+---
+--- Prefers an explicitly configured path, then the adapters found on `$PATH`.
+--- Falls back to the bare name so the adapter manager/PATH can resolve it.
+---@param explicit? string
+---@return string
+local function resolve_lldb_dap(explicit)
+    if explicit and explicit ~= "" then
+        return explicit
+    end
+    for _, name in ipairs({ "lldb-dap", "lldb-vscode" }) do
+        local path = vim.fn.exepath(name)
+        if path ~= "" then
+            return path
+        end
+    end
+    return "lldb-dap"
+end
+
 function M.get_dap_adapter(kind, dap_path)
     -- kind: "lldb"|"gdb"|"custom"
     if kind == "gdb" then
@@ -14,14 +33,14 @@ function M.get_dap_adapter(kind, dap_path)
     if kind == "lldb" or kind == "custom" then
         return {
             type = "executable",
-            command = dap_path or "/usr/bin/lldb-dap",
+            command = resolve_lldb_dap(dap_path),
             name = "lldb-dap",
         }
     end
     -- default to lldb-dap
     return {
         type = "executable",
-        command = dap_path or "/usr/bin/lldb-dap",
+        command = resolve_lldb_dap(dap_path),
         name = "lldb-dap",
     }
 end

@@ -20,14 +20,14 @@ local autocmds_installed = false
 ---@return OrchState?
 function M.load(root)
     root = root or vim.fn.getcwd()
-    local found = project.locate(root)
+    local found, orch_dir = project.locate(root)
 
     if not found then
         state.reset()
         return nil
     end
 
-    return state.setup(found)
+    return state.setup(found, orch_dir)
 end
 
 --- @param opts? { root?: string }
@@ -37,10 +37,21 @@ local function install_autocmds()
     end
     autocmds_installed = true
 
+    local group = vim.api.nvim_create_augroup("OrchLaunch", { clear = true })
+
     vim.api.nvim_create_autocmd("DirChanged", {
-        group = vim.api.nvim_create_augroup("OrchLaunch", { clear = true }),
+        group = group,
         callback = function()
             M.load(vim.fn.getcwd())
+        end,
+    })
+
+    vim.api.nvim_create_autocmd({ "ColorScheme", "VimEnter" }, {
+        group = group,
+        callback = function()
+            pcall(function()
+                require("orchlaunch.ui").apply_theme()
+            end)
         end,
     })
 end
@@ -131,15 +142,6 @@ function M.create_project(root)
     vim.notify(("[orchlaunch] %s .orch project at %s"):format(verb, root), vim.log.levels.INFO)
 
     return loaded
-end
-
-do
-  local ok, au = pcall(vim.api.nvim_create_autocmd, {"ColorScheme", "VimEnter"}, {
-    pattern = "*",
-    callback = function()
-      pcall(function() require("orchlaunch.ui").apply_theme() end)
-    end,
-  })
 end
 
 return M

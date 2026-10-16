@@ -232,6 +232,28 @@ wait_for(function()
 end)
 h.eq("before-launch external ran before the program", vim.fn.filereadable(log) == 1 and h.read(log) or "", "ext\nrun\n")
 
+-- remote-debug runs before-launch actions before attaching
+local remote_log = root .. "/remote.log"
+local ext2 = root .. "/ext2.sh"
+state.add_external_tool(config.external_tool({ name = "mark2", program = ext2, environment = { LOG = remote_log } }))
+h.write(ext2, "#!/bin/sh\necho ext >> \"$LOG\"\n")
+vim.fn.setfperm(ext2, "rwxr-xr-x")
+state.add_configuration(config.remote_debug({
+    name = "AttachBefore",
+    connection = "localhost:1234",
+    adapter = "gdb",
+    before = config.before({ config.external("mark2") }),
+}))
+state.save()
+
+clear_msgs()
+runner.run("AttachBefore", { mode = "debug" })
+h.check(
+    "remote-debug ran before-launch actions",
+    vim.fn.filereadable(remote_log) == 1 and h.read(remote_log) == "ext\n",
+    vim.inspect(messages)
+)
+
 -- unknown external tool aborts before running the program
 local log2 = root .. "/order2.log"
 h.write(log2, "")

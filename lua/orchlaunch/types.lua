@@ -219,6 +219,7 @@
 ---@field env? OrchEnvironment
 ---@field inherit_env? boolean
 ---@field sudo? boolean
+---@field timeout? integer Kill the process after this many milliseconds.
 
 --- Result of a finished process.
 ---@class OrchProcessResult

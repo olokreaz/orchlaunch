@@ -39,13 +39,13 @@ local function ensure_loaded()
     end
 
     local project = require("orchlaunch.project")
-    local found = project.locate(vim.fn.getcwd())
+    local found, orch_dir = project.locate(vim.fn.getcwd())
     if not found then
         notify("no .orch project found; run :OrchLaunchCreateProject first", WARN)
         return nil
     end
 
-    return state.setup(found)
+    return state.setup(found, orch_dir)
 end
 
 --- Resolves a name argument, falling back to the active configuration.
