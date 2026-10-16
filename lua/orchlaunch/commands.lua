@@ -221,7 +221,12 @@ function M.register()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.ui.dialogs.cmake_profiles").open()
+        local dialog = require("orchlaunch.ui.fibrous.cmake_profiles")
+        if dialog.available() then
+            dialog.open()
+        else
+            require("orchlaunch.ui.dialogs.cmake_profiles").open()
+        end
     end, { desc = "Manage CMake profiles" })
 
     vim.api.nvim_create_user_command("OrchLaunchCMakeProject", function()

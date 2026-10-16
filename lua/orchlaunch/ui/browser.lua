@@ -308,7 +308,12 @@ function M.open()
 
     local function open_cmake()
         renderer:close()
-        require("orchlaunch.ui.dialogs.cmake_profiles").open()
+        local dialog = require("orchlaunch.ui.fibrous.cmake_profiles")
+        if dialog.available() then
+            dialog.open()
+        else
+            require("orchlaunch.ui.dialogs.cmake_profiles").open()
+        end
     end
 
     --- Renders the configuration list, or a placeholder when it is empty.
