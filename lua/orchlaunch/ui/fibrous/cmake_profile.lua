@@ -155,6 +155,20 @@ function M.open(existing, on_saved, opts)
     local ui = nr.ui
     local state = require("orchlaunch.state")
 
+    -- Opt-in trace for the functional suite (tests/func): when ORCH_FUNC_LOG is
+    -- set, key handling and map application are recorded there. No-op otherwise.
+    local trace = vim.env.ORCH_FUNC_LOG
+    local function dlog(line)
+        if not trace then
+            return
+        end
+        local f = io.open(trace, "a")
+        if f then
+            f:write("module " .. line .. "\n")
+            f:close()
+        end
+    end
+
     existing = existing or {}
     local readonly = existing.kind ~= nil
     local original_name = existing.name
@@ -440,9 +454,8 @@ function M.open(existing, on_saved, opts)
     -- buffer-local maps are (re)applied from an autocmd, guarded by a buffer flag
     -- so re-application never clobbers anything the user refined once set.
     local function field_cycle(key, enter)
-        if vim.api.nvim_get_mode().mode:sub(1, 1) == "i" then
-            vim.cmd("stopinsert")
-        end
+        dlog(("cycle key=%s mode=%s win=%d"):format(key, vim.api.nvim_get_mode().mode, vim.api.nvim_get_current_win()))
+        vim.cmd("stopinsert")
         if vim.api.nvim_win_is_valid(handle.winid) then
             vim.api.nvim_set_current_win(handle.winid)
         end
@@ -453,6 +466,7 @@ function M.open(existing, on_saved, opts)
     end
 
     local function field_leave()
+        dlog(("leave mode=%s win=%d"):format(vim.api.nvim_get_mode().mode, vim.api.nvim_get_current_win()))
         vim.cmd("stopinsert")
         if vim.api.nvim_win_is_valid(handle.winid) then
             vim.api.nvim_set_current_win(handle.winid)
@@ -540,6 +554,7 @@ function M.open(existing, on_saved, opts)
                 local buf = vim.api.nvim_win_get_buf(win)
                 if not vim.b[buf].orchlaunch_field_keys then
                     vim.b[buf].orchlaunch_field_keys = true
+                    dlog(("map buf=%d lines=%d"):format(buf, vim.api.nvim_buf_line_count(buf)))
                     for _, mode in ipairs({ "n", "i" }) do
                         vim.keymap.set(mode, "<Tab>", function()
                             field_cycle("<Tab>", true)
@@ -593,7 +608,7 @@ function M.open(existing, on_saved, opts)
     end
     wire_field_keys()
     vim.schedule(wire_field_keys)
-    vim.api.nvim_create_autocmd({ "BufWinEnter", "WinNew" }, {
+    vim.api.nvim_create_autocmd({ "BufWinEnter", "WinNew", "BufEnter", "WinEnter" }, {
         group = vim.api.nvim_create_augroup("OrchlaunchFibrousProfileFields", { clear = true }),
         callback = wire_field_keys,
     })
