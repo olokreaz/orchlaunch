@@ -4,7 +4,7 @@ package.path = here .. "/?.lua;" .. package.path
 local h = require("harness")
 
 local last_cfg = nil
-local events = { after = { event_stopped = {}, event_threads = {}, event_stackTrace = {}, event_scopes = {}, event_variables = {} } }
+local events = { after = { event_stopped = {}, event_continued = {}, event_terminated = {}, threads = {}, stackTrace = {}, scopes = {} } }
 package.loaded["dap"] = {
     adapters = {},
     listeners = events,

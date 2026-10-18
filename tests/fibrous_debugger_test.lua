@@ -30,9 +30,9 @@ local listeners = {
         event_continued = {},
         event_exited = {},
         event_terminated = {},
-        event_threads = {},
-        event_stackTrace = {},
-        event_scopes = {},
+        threads = {},
+        stackTrace = {},
+        scopes = {},
     },
 }
 package.loaded["dap"] = {
@@ -58,12 +58,11 @@ local session = require("orchlaunch.debug.session")
 session.attach_listeners()
 
 listeners.after.event_stopped[1](nil, { threadId = 1 })
-listeners.after.event_threads[1](nil, { threads = { { id = 1, name = "main", state = "stopped", selected = true } } })
-listeners.after.event_stackTrace[1](nil, {
-    threadId = 1,
+listeners.after.threads[1](nil, nil, { threads = { { id = 1, name = "main", state = "stopped", selected = true } } })
+listeners.after.stackTrace[1](nil, nil, {
     stackFrames = { { id = 10, name = "main", line = 3, column = 1, source = { name = "main.c", path = "/tmp/main.c" } } },
 })
-listeners.after.event_scopes[1](nil, { scopes = { { name = "Locals", variablesReference = 100, expensive = false } } })
+listeners.after.scopes[1](nil, nil, { scopes = { { name = "Locals", variablesReference = 100, expensive = false } } })
 
 local debugger = require("orchlaunch.ui.fibrous.debugger")
 h.check("debugger available", debugger.available())
@@ -84,8 +83,8 @@ h.contains("scope rendered", text, "Locals")
 h.contains("variables fetched", text, "counter = 42")
 h.contains("controls rendered", text, "Step Over")
 
--- A new event re-renders the panel.
-listeners.after.event_threads[1](nil, { threads = { { id = 2, name = "worker", state = "running" } } })
+-- A new response re-renders the panel.
+listeners.after.threads[1](nil, nil, { threads = { { id = 2, name = "worker", state = "running" } } })
 vim.wait(150)
 h.contains("panel reacts to new events", screen(), "worker")
 
