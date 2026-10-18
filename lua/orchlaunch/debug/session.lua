@@ -25,6 +25,11 @@ local state = {
     status = "idle",           -- idle|running|stopped|exited
 }
 
+-- Refs whose `variables` request is still in flight (ref -> waiting callbacks).
+-- Without this an eager UI re-rendering while a stop is being inspected would
+-- fire one request per render, flooding the adapter and stalling the session.
+local pending_vars = {}
+
 function M.reset()
     state.active = false
     state.threads = {}
@@ -34,6 +39,7 @@ function M.reset()
     state.current_thread = nil
     state.current_frame = nil
     state.status = "idle"
+    pending_vars = {}
     M.emit()
 end
 
@@ -154,13 +160,33 @@ function M.variables(ref, cb)
         return cached
     end
 
+    local inflight = pending_vars[ref]
+    if inflight then
+        if cb then
+            inflight[#inflight + 1] = cb
+        end
+        return {}
+    end
+
     local session = current_session()
     if not session then
         return {}
     end
 
+    local callbacks = {}
+    if cb then
+        callbacks[#callbacks + 1] = cb
+    end
+    pending_vars[ref] = callbacks
+
     session:request("variables", { variablesReference = ref }, function(err, response)
+        local waiting = pending_vars[ref] or {}
+        pending_vars[ref] = nil
         if err then
+            for _, fn in ipairs(waiting) do
+                pcall(fn, {})
+            end
+            M.emit()
             return
         end
         local vars = {}
@@ -168,8 +194,8 @@ function M.variables(ref, cb)
             vars[#vars + 1] = normalize_variable(v)
         end
         state.vars_by_ref[ref] = vars
-        if cb then
-            cb(vars)
+        for _, fn in ipairs(waiting) do
+            pcall(fn, vars)
         end
         M.emit()
     end)
@@ -231,6 +257,8 @@ function M.attach_listeners()
     table.insert(d.listeners.after.event_stopped, function(session, body)
         state.status = "stopped"
         state.active = true
+        state.vars_by_ref = {}
+        pending_vars = {}
         if body and body.threadId then
             state.current_thread = body.threadId
         end
@@ -239,6 +267,8 @@ function M.attach_listeners()
     d.listeners.after.event_continued = d.listeners.after.event_continued or {}
     table.insert(d.listeners.after.event_continued, function()
         state.status = "running"
+        state.vars_by_ref = {}
+        pending_vars = {}
         M.emit()
     end)
     d.listeners.after.event_exited = d.listeners.after.event_exited or {}
@@ -252,10 +282,16 @@ function M.attach_listeners()
         state.active = false
         M.emit()
     end)
-    d.listeners.after.event_threads = d.listeners.after.event_threads or {}
-    table.insert(d.listeners.after.event_threads, function(session, body)
-        if body and body.threads then
-            for _, t in ipairs(body.threads) do
+
+    -- Threads, frames and scopes are *responses* to the `threads`, `stackTrace`
+    -- and `scopes` requests that nvim-dap issues while handling `stopped`; they
+    -- are not DAP events, so they must be observed through the request listeners
+    -- (`after.<command>`), whose signature is (session, err, response).
+    d.listeners.after.threads = d.listeners.after.threads or {}
+    table.insert(d.listeners.after.threads, function(_, _, response)
+        if response and response.threads then
+            state.threads = {}
+            for _, t in ipairs(response.threads) do
                 state.threads[t.id] = { id = t.id, name = t.name, state = t.state, selected = t.selected or false }
                 if t.selected then
                     state.current_thread = t.id
@@ -264,12 +300,12 @@ function M.attach_listeners()
         end
         M.emit()
     end)
-    d.listeners.after.event_stackTrace = d.listeners.after.event_stackTrace or {}
-    table.insert(d.listeners.after.event_stackTrace, function(session, body)
-        if body and body.stackFrames then
-            local tid = body.threadId or state.current_thread
+    d.listeners.after.stackTrace = d.listeners.after.stackTrace or {}
+    table.insert(d.listeners.after.stackTrace, function(_, _, response)
+        if response and response.stackFrames then
+            local tid = state.current_thread
             local frames = {}
-            for _, f in ipairs(body.stackFrames) do
+            for _, f in ipairs(response.stackFrames) do
                 table.insert(frames, {
                     id = f.id,
                     thread_id = tid,
@@ -280,19 +316,21 @@ function M.attach_listeners()
                     address = f.address,
                 })
             end
-            state.frames_by_thread[tid] = frames
+            if tid then
+                state.frames_by_thread[tid] = frames
+            end
             if #frames > 0 then
                 state.current_frame = frames[1]
             end
         end
         M.emit()
     end)
-    d.listeners.after.event_scopes = d.listeners.after.event_scopes or {}
-    table.insert(d.listeners.after.event_scopes, function(session, body)
-        if body and body.scopes and state.current_frame then
+    d.listeners.after.scopes = d.listeners.after.scopes or {}
+    table.insert(d.listeners.after.scopes, function(_, _, response)
+        if response and response.scopes and state.current_frame then
             local fid = state.current_frame.id
             local scopes = {}
-            for _, s in ipairs(body.scopes) do
+            for _, s in ipairs(response.scopes) do
                 table.insert(scopes, {
                     name = s.name,
                     expensive = s.expensive,
