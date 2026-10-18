@@ -1,51 +1,22 @@
--- Pluggable debug backends: registry, request normalization and DAP dispatch.
+-- Pluggable debug backends: registry, resolution and request normalization.
 --
--- Drives `orchlaunch.debug` against a mocked nvim-dap so it asserts on the
--- adapter definitions and launch/attach configurations actually handed to dap.
+-- These are pure functions — turning a backend-neutral request into a DAP
+-- configuration and an adapter definition. No nvim-dap (and no adapter) is
+-- involved here: the real adapters are exercised by the e2e debug tests, so
+-- this file only pins down the request shapes they must receive.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
 local h = require("harness")
 
-local adapters = {}
-local last = nil
-local fake_session = { capabilities = { supportsSetVariable = true } }
-local listeners = {
-    after = {
-        event_stopped = {},
-        event_threads = {},
-        event_stackTrace = {},
-        event_scopes = {},
-    },
-}
-
-package.loaded["dap"] = {
-    adapters = adapters,
-    listeners = listeners,
-    session = function()
-        return fake_session
-    end,
-    run = function(cfg)
-        last = cfg
-    end,
-    close = function() end,
-    continue = function() end,
-    pause = function() end,
-    step_over = function() end,
-    step_into = function() end,
-    step_out = function() end,
-    restart = function() end,
-}
-package.loaded["orchlaunch.debug.session"] = nil
-package.loaded["orchlaunch.debug.init"] = nil
-package.loaded["orchlaunch.debug.backends"] = nil
-
 local registry = require("orchlaunch.debug.backends")
-local debug = require("orchlaunch.debug")
+
+local lldb = registry.get("lldb")
+local gdb = registry.get("gdb")
 
 -- 1. registry ------------------------------------------------------------------
-h.check("lldb backend registered", registry.get("lldb") ~= nil)
-h.check("gdb backend registered", registry.get("gdb") ~= nil)
+h.check("lldb backend registered", lldb ~= nil)
+h.check("gdb backend registered", gdb ~= nil)
 h.eq("default backend is lldb", registry.default().name, "lldb")
 h.eq("two built-in backends", #registry.list(), 2)
 
@@ -57,37 +28,44 @@ h.eq("unknown adapter falls back to default", registry.resolve({ adapter = "weir
 h.eq("adapter path falls back to default", registry.resolve({ adapter = "/usr/bin/lldb-dap" }).name, "lldb")
 h.eq("explicit backend wins", registry.resolve({ backend = "gdb", adapter = "lldb" }).name, "gdb")
 
--- 3. launch through the default (lldb) backend ---------------------------------
-debug.start({ name = "Game" }, { type = "launch", program = "/bin/echo", args = { "hi" } })
-h.eq("launch request", last.request, "launch")
-h.eq("launch adapter type", last.type, "lldb-dap")
-h.eq("launch program", last.program, "/bin/echo")
-h.eq("launch args", last.args[1], "hi")
-h.check("lldb-dap adapter installed", adapters["lldb-dap"] ~= nil)
+-- 3. adapter definitions -------------------------------------------------------
+local lldb_adapter = lldb.adapter({})
+h.eq("lldb adapter key", lldb_adapter.key, "lldb-dap")
+h.eq("lldb adapter kind", lldb_adapter.definition.type, "executable")
 
--- 4. attach selects the configured adapter -------------------------------------
-last = nil
-debug.start(
-    { name = "Attach", connection = "localhost:1234", adapter = "gdb", symbol = "app" },
-    { type = "attach" }
-)
-h.eq("attach request", last.request, "attach")
-h.eq("attach adapter type", last.type, "gdb")
-h.eq("attach host", last.host, "localhost")
-h.eq("attach port", last.port, 1234)
-h.eq("attach program from symbol", last.program, "app")
-h.eq("gdb adapter args", adapters["gdb"].args[1], "--interpreter=dap")
+local gdb_adapter = gdb.adapter({})
+h.eq("gdb adapter key", gdb_adapter.key, "gdb")
+h.eq("gdb adapter command", gdb_adapter.definition.command, "gdb")
+h.eq("gdb adapter args", gdb_adapter.definition.args[1], "--interpreter=dap")
 
--- 5. an adapter given as a path uses the default backend executable -------------
-adapters["lldb-dap"] = nil
-last = nil
-debug.start({ name = "Custom" }, { type = "launch", program = "p", adapter = "/opt/mydap" })
-h.eq("custom path keeps the default backend", last.type, "lldb-dap")
-h.eq("custom path is honored", adapters["lldb-dap"].command, "/opt/mydap")
+h.eq("custom lldb-dap path honored", lldb.adapter({ dap_path = "/opt/mydap" }).definition.command, "/opt/mydap")
 
--- 6. capability negotiation ----------------------------------------------------
-h.check("capabilities exposed", debug.capabilities().supportsSetVariable == true)
-h.check("supports() true", debug.supports("supportsSetVariable") == true)
-h.check("supports() false", debug.supports("supportsSetBreakpoints") == false)
+-- 4. launch request ------------------------------------------------------------
+local launch = lldb.launch({ name = "Game", program = "/bin/echo", args = { "hi" }, cwd = "/tmp" })
+h.eq("launch request", launch.request, "launch")
+h.eq("launch name", launch.name, "Game")
+h.eq("launch program", launch.program, "/bin/echo")
+h.eq("launch args", launch.args[1], "hi")
+h.eq("launch cwd", launch.cwd, "/tmp")
+
+-- 5. attach request ------------------------------------------------------------
+-- lldb-dap describes a remote target with gdb-remote-hostname/gdb-remote-port
+-- and rejects the generic host/port pair.
+local lldb_attach = lldb.attach({ name = "Attach", connection = "localhost:1234", program = "app" })
+h.eq("lldb attach request", lldb_attach.request, "attach")
+h.eq("lldb attach remote port", lldb_attach["gdb-remote-port"], 1234)
+h.eq("lldb attach remote host", lldb_attach["gdb-remote-hostname"], "localhost")
+h.eq("lldb attach program", lldb_attach.program, "app")
+h.check("lldb attach has no generic host/port", lldb_attach.host == nil and lldb_attach.port == nil)
+
+local lldb_pid = lldb.attach({ name = "PID", pid = 4242, program = "app" })
+h.eq("lldb attach pid", lldb_pid.pid, 4242)
+h.check("lldb attach pid has no remote port", lldb_pid["gdb-remote-port"] == nil)
+
+local gdb_attach = gdb.attach({ name = "Attach", connection = "localhost:9000", program = "app" })
+h.eq("gdb attach request", gdb_attach.request, "attach")
+h.eq("gdb attach host", gdb_attach.host, "localhost")
+h.eq("gdb attach port", gdb_attach.port, 9000)
+h.eq("gdb attach program", gdb_attach.program, "app")
 
 h.done("debug backend registry")

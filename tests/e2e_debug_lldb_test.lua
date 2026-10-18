@@ -221,6 +221,23 @@ h.check("std::vector visible", vars.vec ~= nil and tostring(vars.vec.type):find(
 h.check("std::map visible", vars.m ~= nil and tostring(vars.m.type):find("map") ~= nil, vars.m and vars.m.type)
 h.contains("argument visible", vars.base and vars.base.value or "", "7")
 
+-- Real expression evaluation against the live frame.
+local evaluated
+dbg.evaluate("i + 1", function(res)
+    evaluated = res
+end)
+h.check("evaluate returns a result", wait_for(function()
+    return evaluated ~= nil
+end, 5000), tostring(evaluated))
+h.contains("evaluate computes i + 1", evaluated or "", "43")
+
+-- Hammer the variable cache: repeated reads must not spawn a request storm or
+-- lose the already-fetched values (regression on the in-flight dedup).
+for _ = 1, 200 do
+    dbg.variables(locals.variablesReference)
+end
+h.check("variables survive rapid repeated reads", #dbg.variables(locals.variablesReference) > 0)
+
 -- Controls: resuming lets the process run to completion.
 dbg.continue()
 h.check("continue resumes and the program exits", wait_for(function()
