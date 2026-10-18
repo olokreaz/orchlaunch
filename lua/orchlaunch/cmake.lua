@@ -539,8 +539,14 @@ end
 ---@return OrchCMakeTarget[]?
 function M.targets()
     local source_dir = M.source_dir()
+    local binary_dir = M.binary_dir()
     local cached = state.get_runtime("cmake_targets")
-    if type(cached) == "table" and state.get_runtime("cmake_source_dir") == source_dir then
+    local cached_binary = state.get_runtime("cmake_binary_dir")
+    if
+        type(cached) == "table"
+        and state.get_runtime("cmake_source_dir") == source_dir
+        and (cached_binary == nil or cached_binary == binary_dir)
+    then
         return cached
     end
 
@@ -548,7 +554,7 @@ function M.targets()
     if discovered and #discovered > 0 then
         state.set_runtime("cmake_targets", discovered)
         state.set_runtime("cmake_source_dir", source_dir)
-        state.set_runtime("cmake_binary_dir", M.binary_dir())
+        state.set_runtime("cmake_binary_dir", binary_dir)
         return discovered
     end
 
