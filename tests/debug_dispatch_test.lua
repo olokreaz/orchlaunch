@@ -1,4 +1,7 @@
--- DAP mock test: verify our debug overlay (launch/attach + state API) works with mocked dap
+-- Unit test: the run/debug dispatch builds the right DAP launch/attach config
+-- for native and remote-debug configurations. nvim-dap is mocked here on
+-- purpose (this only checks the request shape); the end-to-end coverage against
+-- a real adapter lives in e2e_debug_lldb_test / e2e_debugger_panel_test.
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
 local h = require("harness")
