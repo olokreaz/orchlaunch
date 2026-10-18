@@ -1,5 +1,10 @@
--- OrchLaunch debug public API
-local lldb = require("orchlaunch.debug.lldb")
+-- OrchLaunch debug public API.
+--
+-- Owns the DAP glue and the neutral request built from a configuration. The
+-- actual adapter is chosen through the backend registry, so new debuggers are
+-- added as backends without touching this file (or the UI).
+
+local backend_registry = require("orchlaunch.debug.backends")
 local session = require("orchlaunch.debug.session")
 
 local M = {}
@@ -18,6 +23,48 @@ local function get_dap()
     return dap
 end
 
+--- Builds a backend-neutral request from a configuration and launch options.
+---@param cfg? table
+---@param opts? table
+---@return OrchDebugRequest
+local function build_request(cfg, opts)
+    cfg = cfg or {}
+    opts = opts or {}
+
+    local mode = opts.type == "attach" and "attach" or "launch"
+    local adapter = opts.adapter or cfg.adapter
+
+    local request = {
+        mode = mode,
+        name = cfg.name or opts.name,
+        backend = opts.backend,
+        adapter = adapter,
+        kind = opts.kind,
+        dap_path = opts.dap_path,
+        program = opts.program,
+        args = opts.args,
+        cwd = opts.cwd,
+        env = opts.env,
+        connection = cfg.connection or opts.connection,
+        pid = opts.pid,
+        stop_on_entry = opts.stop_on_entry,
+    }
+
+    if mode == "attach" and not request.program then
+        request.program = cfg.symbol
+    end
+    -- An adapter given as a path means "use this executable".
+    if not request.dap_path and backend_registry.is_path(adapter) then
+        request.dap_path = adapter
+    end
+
+    return request
+end
+
+--- Starts a debug session for `cfg`.
+---@param cfg? table
+---@param opts? table
+---@return table? config The DAP configuration that was run.
 function M.start(cfg, opts)
     opts = opts or {}
     local d = get_dap()
@@ -25,30 +72,28 @@ function M.start(cfg, opts)
         vim.notify("[orchlaunch] nvim-dap is not installed", vim.log.levels.ERROR)
         return nil
     end
+
     session.start_session()
-    local dc
-    if opts.type == "attach" then
-        dc = lldb.attach_remote(d, {
-            kind = opts.kind or "lldb",
-            dap_path = opts.dap_path,
-            connection = cfg and cfg.connection or opts.connection,
-            program = opts.program or (cfg and cfg.symbol),
-            pid = opts.pid,
-            name = cfg and cfg.name or opts.name,
-        })
-    else
-        dc = lldb.launch_native(d, {
-            kind = opts.kind or "lldb",
-            dap_path = opts.dap_path,
-            program = opts.program,
-            args = opts.args,
-            cwd = opts.cwd,
-            env = opts.env,
-            name = cfg.name,
-        })
+
+    local request = build_request(cfg, opts)
+    local backend = backend_registry.resolve(request)
+    if not backend then
+        vim.notify("[orchlaunch] no debug backend available", vim.log.levels.ERROR)
+        return nil
     end
-    d.run(dc)
-    return dc
+
+    -- A backend may take over the whole launch (non-DAP debuggers).
+    if backend.run then
+        return backend.run(request, d)
+    end
+
+    local adapter = backend.adapter(request)
+    d.adapters[adapter.key] = d.adapters[adapter.key] or adapter.definition
+
+    local config = (request.mode == "attach") and backend.attach(request) or backend.launch(request)
+    config.type = adapter.key
+    d.run(config)
+    return config
 end
 
 function M.stop()
@@ -101,6 +146,11 @@ function M.restart()
     end
 end
 
+--- @return string[] Registered backend names.
+function M.backends()
+    return backend_registry.list()
+end
+
 M.threads = session.threads
 M.current_thread = session.current_thread
 M.frames = session.frames
@@ -108,6 +158,8 @@ M.current_frame = session.current_frame
 M.scopes = session.scopes
 M.variables = session.variables
 M.status = session.status
+M.capabilities = session.capabilities
+M.supports = session.supports
 M.stopped = function()
     return session.status() == "stopped"
 end

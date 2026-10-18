@@ -38,16 +38,17 @@ h.check("process timeout returns quickly", elapsed_ms < 2000, ("elapsed %.0fms")
 h.check("process was killed", result.signal == 9 or result.code ~= 0, vim.inspect(result))
 
 -- 3. lldb adapter path is resolved dynamically ---------------------------------
-local lldb = require("orchlaunch.debug.lldb")
-local adapter = lldb.get_dap_adapter("lldb")
+local registry = require("orchlaunch.debug.backends")
+local lldb = registry.get("lldb")
+local adapter = lldb.adapter({})
 local resolved = vim.fn.exepath("lldb-dap")
-h.eq("lldb-dap resolves from PATH when present", adapter.command, resolved ~= "" and resolved or "lldb-dap")
+h.eq("lldb-dap resolves from PATH when present", adapter.definition.command, resolved ~= "" and resolved or "lldb-dap")
 h.check(
     "lldb-dap command is executable or a bare name",
-    adapter.command == "lldb-dap" or vim.fn.exepath(adapter.command) ~= "",
-    adapter.command
+    adapter.definition.command == "lldb-dap" or vim.fn.exepath(adapter.definition.command) ~= "",
+    adapter.definition.command
 )
-h.eq("explicit adapter path is honored", lldb.get_dap_adapter("lldb", "/opt/lldb-dap").command, "/opt/lldb-dap")
+h.eq("explicit adapter path is honored", lldb.adapter({ dap_path = "/opt/lldb-dap" }).definition.command, "/opt/lldb-dap")
 
 -- 4. state.setup accepts a pre-resolved orch_dir -------------------------------
 local project = require("orchlaunch.project")

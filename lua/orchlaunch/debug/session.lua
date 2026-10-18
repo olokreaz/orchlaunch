@@ -93,6 +93,21 @@ local function current_session()
     return d.session()
 end
 
+--- Capabilities advertised by the adapter in its `initialize` response.
+--- Empty until a session has negotiated them.
+---@return table<string, any>
+function M.capabilities()
+    local session = current_session()
+    return (session and session.capabilities) or {}
+end
+
+--- Whether the active adapter supports a DAP capability.
+---@param capability string
+---@return boolean
+function M.supports(capability)
+    return M.capabilities()[capability] == true
+end
+
 --- Returns the children of a variables reference.
 ---
 --- Served from the cache when the reference was fetched before; otherwise the
