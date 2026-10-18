@@ -34,6 +34,31 @@ function M.reset()
     state.current_thread = nil
     state.current_frame = nil
     state.status = "idle"
+    M.emit()
+end
+
+-- ============================================================================
+-- Change notifications
+-- ============================================================================
+
+local subscribers = {}
+
+--- Notifies every subscriber that the session state changed. UI layers
+--- subscribe here to re-render on adapter events.
+function M.emit()
+    for fn in pairs(subscribers) do
+        pcall(fn)
+    end
+end
+
+--- Registers `fn` to run on every session change.
+--- @param fn fun()
+--- @return fun() unsubscribe
+function M.subscribe(fn)
+    subscribers[fn] = true
+    return function()
+        subscribers[fn] = nil
+    end
 end
 
 function M.is_active()
@@ -146,6 +171,7 @@ function M.variables(ref, cb)
         if cb then
             cb(vars)
         end
+        M.emit()
     end)
 
     return {}
@@ -208,15 +234,23 @@ function M.attach_listeners()
         if body and body.threadId then
             state.current_thread = body.threadId
         end
+        M.emit()
+    end)
+    d.listeners.after.event_continued = d.listeners.after.event_continued or {}
+    table.insert(d.listeners.after.event_continued, function()
+        state.status = "running"
+        M.emit()
     end)
     d.listeners.after.event_exited = d.listeners.after.event_exited or {}
     table.insert(d.listeners.after.event_exited, function()
         state.status = "exited"
+        M.emit()
     end)
     d.listeners.after.event_terminated = d.listeners.after.event_terminated or {}
     table.insert(d.listeners.after.event_terminated, function()
         state.status = "exited"
         state.active = false
+        M.emit()
     end)
     d.listeners.after.event_threads = d.listeners.after.event_threads or {}
     table.insert(d.listeners.after.event_threads, function(session, body)
@@ -228,6 +262,7 @@ function M.attach_listeners()
                 end
             end
         end
+        M.emit()
     end)
     d.listeners.after.event_stackTrace = d.listeners.after.event_stackTrace or {}
     table.insert(d.listeners.after.event_stackTrace, function(session, body)
@@ -250,6 +285,7 @@ function M.attach_listeners()
                 state.current_frame = frames[1]
             end
         end
+        M.emit()
     end)
     d.listeners.after.event_scopes = d.listeners.after.event_scopes or {}
     table.insert(d.listeners.after.event_scopes, function(session, body)
@@ -266,6 +302,7 @@ function M.attach_listeners()
             end
             state.scopes_by_frame[fid] = scopes
         end
+        M.emit()
     end)
 end
 
@@ -274,6 +311,7 @@ function M.start_session()
     M.attach_listeners()
     state.active = true
     state.status = "running"
+    M.emit()
 end
 
 return M

@@ -93,6 +93,7 @@ function M.start(cfg, opts)
     local config = (request.mode == "attach") and backend.attach(request) or backend.launch(request)
     config.type = adapter.key
     d.run(config)
+    pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "OrchLaunchDebugStarted" })
     return config
 end
 
@@ -164,5 +165,6 @@ M.stopped = function()
     return session.status() == "stopped"
 end
 M.evaluate = session.evaluate
+M.subscribe = session.subscribe
 
 return M

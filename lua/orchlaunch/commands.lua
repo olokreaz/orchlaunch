@@ -96,6 +96,20 @@ function M.register()
     end
     registered = true
 
+    -- Opt-in: open the debugger panel automatically when a debug session starts.
+    vim.api.nvim_create_autocmd("User", {
+        group = vim.api.nvim_create_augroup("OrchLaunchDebugger", { clear = true }),
+        pattern = "OrchLaunchDebugStarted",
+        callback = function()
+            if vim.g.orchlaunch_auto_debug_ui == true then
+                local ui = require("orchlaunch.ui.fibrous.debugger")
+                if ui.available() then
+                    ui.open()
+                end
+            end
+        end,
+    })
+
     vim.api.nvim_create_user_command("OrchLaunch", function()
         if not ensure_loaded() then
             return
@@ -202,6 +216,15 @@ function M.register()
             return configuration_names()
         end,
     })
+
+    vim.api.nvim_create_user_command("OrchLaunchDebugger", function()
+        local ui = require("orchlaunch.ui.fibrous.debugger")
+        if ui.available() then
+            ui.open()
+        else
+            notify("the debugger panel needs fibrous.nvim", WARN)
+        end
+    end, { desc = "Toggle the debugger panel" })
 
     vim.api.nvim_create_user_command("OrchLaunchToolchains", function()
         if not ensure_loaded() then
