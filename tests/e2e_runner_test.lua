@@ -4,7 +4,7 @@
 --   * native run with resolved args / environment / working directory
 --   * `inherit_env` handling
 --   * console modes (none, hidden, embedded)
---   * debug + remote-debug guidance (DAP not implemented)
+--   * native debug + remote-debug dispatch into the debug layer
 --   * compound configurations
 --   * before-launch external tools and ordering
 --   * before-launch build of a real CMake target

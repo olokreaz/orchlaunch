@@ -43,7 +43,23 @@ target discovery — driven from JSON files inside a `.orch` project.
   list, details and every manager, backed by plain JSON on disk.
 - **Active configuration** — remembered per project (outside `.orch`).
 
-> Debugging (DAP) integrates with nvim-dap (launch for native, attach for remote-debug). If nvim-dap is not installed, OrchLaunch will notify accordingly.
+## Debugging
+
+Debug sessions run through [nvim-dap](https://github.com/mfussenegger/nvim-dap).
+OrchLaunch ships two backends — LLDB (`lldb-dap`/`lldb-vscode`) and GDB
+(`gdb --interpreter=dap`) — selected per configuration (`adapter = "gdb"` or
+`"lldb"`). `native` configurations launch, `remote-debug` attaches (e.g. start
+`lldb-server gdbserver :1234 -- ./prog`, then set `connection = "host:port"`).
+
+- **Debugger panel** — `:OrchLaunchDebugger` opens a fibrous panel with threads,
+  frames, scopes, variables and stepping controls (Continue, Pause, Step
+  Over/In/Out, Restart, Stop, Toggle BP). It re-renders on every session event.
+- **Breakpoints** — toggle with `:OrchLaunchToggleBreakpoint`, add a condition
+  with `:OrchLaunchBreakpoint <expr>`, a log point with
+  `:OrchLaunchLogBreakpoint <msg>`, and manage them all with
+  `:OrchLaunchBreakpoints`. They persist per project in `.orch/breakpoints.json`.
+
+If nvim-dap is not installed, OrchLaunch notifies accordingly.
 
 ## Requirements
 
@@ -250,6 +266,12 @@ read-only.
 | `:OrchLaunchSelect [name]` | Set the active configuration |
 | `:OrchLaunchRun [name]` | Run a configuration (active when omitted) |
 | `:OrchLaunchDebug [name]` | Debug a configuration (active when omitted) |
+| `:OrchLaunchDebugger` | Open the fibrous debugger panel |
+| `:OrchLaunchToggleBreakpoint` | Toggle a breakpoint at the cursor |
+| `:OrchLaunchBreakpoint <expr>` | Set a conditional breakpoint at the cursor |
+| `:OrchLaunchLogBreakpoint <msg>` | Set a log point at the cursor |
+| `:OrchLaunchBreakpoints` | Manage breakpoints |
+| `:OrchLaunchClearBreakpoints` | Clear all breakpoints |
 | `:OrchLaunchEdit [name]` | Edit a run configuration |
 | `:OrchLaunchToolchains` | Manage toolchains |
 | `:OrchLaunchExternalTools` | Manage external tools |
@@ -300,12 +322,15 @@ orchlauncher.nvim/
 │   ├── types.lua       -- LuaCATS type definitions
 │   ├── commands.lua    -- user commands
 │   ├── cmake.lua       -- CMake configuration and target discovery
-│   └── ui/             -- Volt UI engine and screens
+│   ├── breakpoints.lua -- project breakpoints (conditions, persistence)
+│   ├── debug/          -- DAP glue: backends (lldb, gdb) + neutral session
+│   └── ui/             -- UI engine and screens (kit + fibrous)
 │       ├── kit.lua     -- the Volt renderer + declarative builder
 │       ├── init.lua    -- shared helpers (`n`, `renderer`, env parsing)
 │       ├── form.lua    -- shared editor field helpers (input/select/save)
 │       ├── browser.lua -- the Run/Debug configurations browser
 │       ├── scratch.lua -- scratch output viewer
+│       ├── fibrous/    -- fibrous.nvim panels (browser, editors, debugger, …)
 │       ├── editors/    -- one module per editor window (native, remote, …)
 │       └── dialogs/    -- list dialogs (toolchains, external tools, CMake profiles)
 ├── tests/              -- headless test suite

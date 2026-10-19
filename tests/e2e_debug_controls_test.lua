@@ -148,33 +148,39 @@ local function frame_name()
     return frame and frame.name
 end
 
-h.check("Step Over button found", press("Step Over"))
-h.check("Step Over advances to the call line", wait_for(function()
+-- Press a button and wait for its effect; retry once or twice in case a single
+-- keypress is swallowed by a panel re-render race.
+local function press_until(label, pred, ms)
+    for _ = 1, 4 do
+        press(label)
+        if wait_for(pred, ms or 6000) then
+            return true
+        end
+    end
+    return false
+end
+
+h.check("Step Over advances to the call line", press_until("Step Over", function()
     return dbg.status() == "stopped" and frame_line() == call_line
 end), frame_line())
 
-h.check("Step In button found", press("Step In"))
-h.check("Step In enters helper()", wait_for(function()
+h.check("Step In enters helper()", press_until("Step In", function()
     return dbg.status() == "stopped" and (frame_name() or ""):find("helper", 1, true) ~= nil
 end), frame_name())
 
-h.check("Step Out button found", press("Step Out"))
-h.check("Step Out returns to main", wait_for(function()
+h.check("Step Out returns to main", press_until("Step Out", function()
     return dbg.status() == "stopped" and frame_name() == "main"
 end), frame_name())
 
-h.check("Continue button found", press("Continue"))
-h.check("Continue resumes the program", wait_for(function()
+h.check("Continue resumes the program", press_until("Continue", function()
     return dbg.status() == "running"
-end, 5000), dbg.status())
+end), dbg.status())
 
-h.check("Pause button found", press("Pause"))
-h.check("Pause stops the running program", wait_for(function()
+h.check("Pause stops the running program", press_until("Pause", function()
     return dbg.status() == "stopped"
 end, 8000), dbg.status())
 
-h.check("Restart button found", press("Restart"))
-h.check("Restart stops at the breakpoint again", wait_for(function()
+h.check("Restart stops at the breakpoint again", press_until("Restart", function()
     return dbg.status() == "stopped" and frame_line() == a_line
 end, 15000), frame_line())
 

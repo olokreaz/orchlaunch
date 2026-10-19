@@ -293,6 +293,18 @@ function M.register()
         end
     end, { desc = "Manage breakpoints" })
 
+    vim.api.nvim_create_user_command("OrchLaunchCheck", function()
+        local preflight = require("orchlaunch.preflight")
+        preflight.run(function(message, level)
+            vim.notify(message, level)
+        end)
+        if preflight.ok() then
+            notify("environment looks ready")
+        else
+            notify("some required tools are missing", WARN)
+        end
+    end, { desc = "Check external tools and integrations" })
+
     vim.api.nvim_create_user_command("OrchLaunchToolchains", function()
         if not ensure_loaded() then
             return

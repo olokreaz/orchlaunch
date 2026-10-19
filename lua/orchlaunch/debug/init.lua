@@ -95,6 +95,14 @@ function M.start(cfg, opts)
         return nil
     end
 
+    if backend.available and not backend.available() then
+        vim.notify(
+            ("[orchlaunch] the %s debug adapter is not installed"):format(backend.name),
+            vim.log.levels.ERROR
+        )
+        return nil
+    end
+
     -- A backend may take over the whole launch (non-DAP debuggers).
     if backend.run then
         return backend.run(request, d)
