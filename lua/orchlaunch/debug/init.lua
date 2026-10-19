@@ -20,6 +20,19 @@ local function get_dap()
         return nil
     end
     dap = d
+    -- nvim-dap's default `switchbuf=uselast` reuses the *current* window when a
+    -- session stops, which would replace the debugger panel with the source
+    -- file. Prefer an already-open source window instead (what nvim-dap-ui
+    -- does). Overridable via `vim.g.orchlaunch_dap_switchbuf` (a string, or
+    -- `false` to leave nvim-dap's default untouched).
+    local forced = vim.g.orchlaunch_dap_switchbuf
+    if d.defaults and d.defaults.fallback and d.defaults.fallback.switchbuf == nil then
+        if type(forced) == "string" and forced ~= "" then
+            d.defaults.fallback.switchbuf = forced
+        elseif forced == nil then
+            d.defaults.fallback.switchbuf = "useopen,usetab"
+        end
+    end
     return dap
 end
 

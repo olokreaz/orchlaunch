@@ -19,6 +19,7 @@ local function build_paths(orch_dir)
         external_tools = vim.fs.joinpath(orch_dir, "external_tools.json"),
         toolchain = vim.fs.joinpath(orch_dir, "toolchain.json"),
         cmake_settings = vim.fs.joinpath(orch_dir, "cmake_settings.json"),
+        breakpoints = vim.fs.joinpath(orch_dir, "breakpoints.json"),
     }
 end
 
@@ -77,6 +78,14 @@ local function load_cmake_settings(path)
     end
 
     return { source_dir = doc.source_dir, profiles = {} }
+end
+
+--- @param path string
+--- @return table[]
+local function load_breakpoints(path)
+    local raw = config.load(path)
+    local list = raw.breakpoints or {}
+    return type(list) == "table" and list or {}
 end
 
 ---@param list table[]
@@ -164,6 +173,7 @@ function M.setup(root, orch_dir)
         external_tools = load_external_tools(paths.external_tools),
         toolchains = load_toolchains(paths.toolchain),
         cmake = load_cmake_settings(paths.cmake_settings),
+        breakpoints = load_breakpoints(paths.breakpoints),
         runtime = {},
     }
 
@@ -246,6 +256,12 @@ end
 function M.cmake_settings()
     local doc = M.get().cmake
     return find_by_name(doc.profiles, doc.active) or {}
+end
+
+--- Persisted breakpoints (project-relative records; applied by `breakpoints`).
+---@return table[]
+function M.breakpoints()
+    return M.get().breakpoints or {}
 end
 
 --- The directory that CMake operates on: the project-wide `source_dir`
@@ -573,6 +589,7 @@ function M.save()
     config.save(current.paths.external_tools, current.external_tools)
     config.save(current.paths.toolchain, current.toolchains)
     config.save(current.paths.cmake_settings, { cmake = current.cmake })
+    config.save(current.paths.breakpoints, { breakpoints = current.breakpoints or {} })
 
     return true
 end
@@ -585,6 +602,7 @@ function M.reload()
     current.external_tools = load_external_tools(current.paths.external_tools)
     current.toolchains = load_toolchains(current.paths.toolchain)
     current.cmake = load_cmake_settings(current.paths.cmake_settings)
+    current.breakpoints = load_breakpoints(current.paths.breakpoints)
     current.runtime = {}
 
     return current

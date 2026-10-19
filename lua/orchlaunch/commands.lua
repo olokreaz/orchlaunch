@@ -226,6 +226,73 @@ function M.register()
         end
     end, { desc = "Toggle the debugger panel" })
 
+    --- @return boolean ok, integer? bufnr, integer? line
+    local function cursor_breakpoint_target()
+        local bufnr = vim.api.nvim_get_current_buf()
+        if vim.api.nvim_buf_get_name(bufnr) == "" then
+            notify("current buffer is not a file", WARN)
+            return false
+        end
+        local line = vim.api.nvim_win_get_cursor(0)[1]
+        return true, bufnr, line
+    end
+
+    vim.api.nvim_create_user_command("OrchLaunchToggleBreakpoint", function()
+        ensure_loaded()
+        local ok, bufnr, line = cursor_breakpoint_target()
+        if not ok then
+            return
+        end
+        local breakpoints = require("orchlaunch.breakpoints")
+        breakpoints.toggle({}, bufnr, line)
+        notify(("breakpoint %s at %s:%d"):format(
+            breakpoints.has(bufnr, line) and "set" or "removed",
+            vim.fs.basename(vim.api.nvim_buf_get_name(bufnr)), line
+        ))
+    end, { desc = "Toggle a breakpoint at the cursor" })
+
+    vim.api.nvim_create_user_command("OrchLaunchBreakpoint", function(args)
+        ensure_loaded()
+        local ok, bufnr, line = cursor_breakpoint_target()
+        if not ok then
+            return
+        end
+        require("orchlaunch.breakpoints").set({ condition = args.args }, bufnr, line)
+        notify(("conditional breakpoint (%s) at line %d"):format(args.args, line))
+    end, { nargs = 1, desc = "Set a conditional breakpoint at the cursor" })
+
+    vim.api.nvim_create_user_command("OrchLaunchLogBreakpoint", function(args)
+        ensure_loaded()
+        local ok, bufnr, line = cursor_breakpoint_target()
+        if not ok then
+            return
+        end
+        require("orchlaunch.breakpoints").set({ log_message = args.args }, bufnr, line)
+        notify(("log point (%s) at line %d"):format(args.args, line))
+    end, { nargs = 1, desc = "Set a log point at the cursor" })
+
+    vim.api.nvim_create_user_command("OrchLaunchClearBreakpoints", function()
+        require("orchlaunch.breakpoints").clear()
+        notify("all breakpoints cleared")
+    end, { desc = "Clear all breakpoints" })
+
+    vim.api.nvim_create_user_command("OrchLaunchBreakpoints", function()
+        ensure_loaded()
+        local ui = require("orchlaunch.ui.fibrous.breakpoints")
+        if ui.available() then
+            ui.open()
+        else
+            local list = require("orchlaunch.breakpoints").list()
+            if #list == 0 then
+                notify("no breakpoints", WARN)
+            else
+                for _, bp in ipairs(list) do
+                    notify(require("orchlaunch.breakpoints").label(bp))
+                end
+            end
+        end
+    end, { desc = "Manage breakpoints" })
+
     vim.api.nvim_create_user_command("OrchLaunchToolchains", function()
         if not ensure_loaded() then
             return

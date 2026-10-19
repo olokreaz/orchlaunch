@@ -27,7 +27,11 @@ function M.load(root)
         return nil
     end
 
-    return state.setup(found, orch_dir)
+    local loaded = state.setup(found, orch_dir)
+    pcall(function()
+        require("orchlaunch.breakpoints").load()
+    end)
+    return loaded
 end
 
 --- @param opts? { root?: string }
@@ -137,6 +141,9 @@ function M.create_project(root)
     root = root or vim.fn.getcwd()
     local created = project.create(root)
     local loaded = state.setup(root)
+    pcall(function()
+        require("orchlaunch.breakpoints").load()
+    end)
 
     local verb = created and "created" or "loaded existing"
     vim.notify(("[orchlaunch] %s .orch project at %s"):format(verb, root), vim.log.levels.INFO)

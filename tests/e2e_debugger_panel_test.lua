@@ -1,11 +1,12 @@
 -- Real debugger-panel end-to-end test.
 --
--- Unlike fibrous_debugger_test (which feeds mocked dap events), this drives the
--- actual `lldb-dap` adapter: it compiles a real C++ program, sets a breakpoint
--- before a printf, starts a real session and opens the fibrous debugger panel
--- *on top of it*. The assertions read the panel's rendered buffer, so they only
--- pass if the adapter, the neutral session and the UI all work together for
--- real — no mocks anywhere. Skips cleanly without clang++/lldb-dap/fibrous.
+-- This drives the actual `lldb-dap` adapter: it compiles a real C++ program,
+-- sets a breakpoint before a printf, starts a real session and opens the
+-- fibrous debugger panel *on top of it*. The assertions read the panel's
+-- rendered buffer, so they only pass if the adapter, the neutral session and
+-- the UI all work together for real — no mocks anywhere. The buttons
+-- themselves are exercised by e2e_debug_controls_test.lua.
+-- Skips cleanly without clang++/lldb-dap/fibrous.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path

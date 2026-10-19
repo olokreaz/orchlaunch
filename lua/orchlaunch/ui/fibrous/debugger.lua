@@ -178,6 +178,18 @@ local function Debugger(ctx, props)
     control("Continue", function()
         debug.continue()
     end)
+    control("Pause", function()
+        debug.pause()
+    end)
+    control("Toggle BP", function()
+        local frame = session.current_frame()
+        local src = frame and frame.source
+        if src and src.path and src.path ~= "" and frame.line then
+            local bufnr = vim.fn.bufadd(src.path)
+            vim.fn.bufload(bufnr)
+            require("orchlaunch.breakpoints").toggle({}, bufnr, frame.line)
+        end
+    end)
     control("Step Over", function()
         debug.step_over()
     end)
@@ -217,7 +229,7 @@ local function Debugger(ctx, props)
             },
             {
                 comp = nr.ui.label,
-                props = { text = "Continue · Step Over/In/Out · Restart · Stop", style = { text_hl = "Comment" } },
+                props = { text = "Continue · Pause · Step Over/In/Out · Restart · Stop", style = { text_hl = "Comment" } },
             },
         },
     }
