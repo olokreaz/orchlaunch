@@ -1,9 +1,8 @@
--- Fibrous CMake profiles dialog (prototype).
+-- Fibrous CMake profiles dialog.
 --
 -- The screen is rendered by fibrous into one host buffer; we assert on the
 -- rendered text and drive the list through its buffer-local mappings. Skips
--- cleanly when fibrous is not installed (the kit implementation still backs the
--- command in that case).
+-- cleanly when fibrous is not installed.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path

@@ -1,8 +1,7 @@
 -- OrchLaunch — Run/Debug Configurations browser on fibrous.
 --
 -- A spec over `orchlaunch.ui.fibrous.list` plus the config-type chooser and the
--- Run/Debug/Duplicate/Load-CMake extras. The kit browser backs it when fibrous
--- is not installed.
+-- Run/Debug/Duplicate/Load-CMake extras.
 
 local list = require("orchlaunch.ui.fibrous.list")
 local util = require("orchlaunch.ui.fibrous.util")

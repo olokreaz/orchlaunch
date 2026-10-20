@@ -96,7 +96,7 @@ end
 
 --- Opens the Run/Debug configurations browser.
 function M.open()
-    require("orchlaunch.ui.browser").open()
+    require("orchlaunch.ui.fibrous.browser").open()
 end
 
 ---@param name? string

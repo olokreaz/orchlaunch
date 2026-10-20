@@ -308,6 +308,38 @@ function M.open(opts)
         })
     end
 
+    -- Generic test/inspection hooks, mirroring the CMake profile editor's
+    -- `.orch` API. Editors with custom hooks (attach) keep theirs.
+    if not handle.orch then
+        local store = form
+        local ids = {}
+        for id in pairs(opts.initial) do
+            ids[#ids + 1] = id
+        end
+        table.sort(ids)
+        local fields_meta = {}
+        for _, id in ipairs(ids) do
+            fields_meta[#fields_meta + 1] = { id = id }
+        end
+        handle.orch = {
+            readonly = readonly,
+            fields = fields_meta,
+            values = setmetatable({}, {
+                __index = function(_, k)
+                    return (store and store.get() or {})[k]
+                end,
+            }),
+            set = set,
+            save = save,
+            close = function()
+                close()
+            end,
+            _field_cells = function()
+                return handle._fields.cells()
+            end,
+        }
+    end
+
     return handle
 end
 

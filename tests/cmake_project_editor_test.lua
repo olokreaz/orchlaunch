@@ -1,28 +1,38 @@
+-- CMake project directory editor (fibrous).
+
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
-require("harness")
+local h = require("harness")
 
-local root = vim.fn.tempname()
-vim.fn.delete(root, "rf")
+if not (pcall(require, "fibrous")) then
+    print("SKIP  fibrous is not installed")
+    h.done("CMake project editor (skipped)")
+    return
+end
+
+local root = h.tempdir()
 vim.fn.mkdir(root .. "/boo", "p")
-local function write(p, c) local f=assert(io.open(p,"w")); f:write(c); f:close() end
-write(root .. "/boo/CMakePresets.json", [[{ "version": 6, "configurePresets": [ { "name": "boo-debug" } ] }]])
 
 local orch = require("orchlaunch")
 local state = require("orchlaunch.state")
-local editor = require("orchlaunch.ui.editors.cmake_project")
+local editor = require("orchlaunch.ui.fibrous.editors.cmake_project")
+
 orch.create_project(root)
 
 local saved = false
-local renderer = editor.open(function() saved = true end)
-vim.wait(200)
-assert(renderer and renderer:get_component_by_id("source_dir"), "editor did not render")
-renderer:get_component_by_id("source_dir"):set_current_value("${workspace}/boo")
-assert(renderer._save, "save handler missing")
-renderer._save()
-vim.wait(50)
-print("saved:", saved)
-print("raw:", tostring(state.cmake_source_dir_raw()))
-print("resolved:", state.cmake_source_dir())
-local p = state.presets()
-print("presets:", p and p.configure[1].name or "nil")
+local handle = editor.open(function()
+    saved = true
+end)
+vim.wait(150)
+h.check("editor renders", handle ~= nil and handle.orch ~= nil)
+h.check("has source_dir field", handle.orch.values.source_dir ~= nil)
+
+handle.orch.set("source_dir", "${workspace}/boo")
+handle.orch.save()
+vim.wait(100)
+
+h.check("on_saved fired", saved)
+h.eq("raw source dir persisted", state.cmake_source_dir_raw(), "${workspace}/boo")
+h.eq("resolved source dir", state.cmake_source_dir(), root .. "/boo")
+
+h.done("CMake project editor")

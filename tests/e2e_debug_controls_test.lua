@@ -126,12 +126,22 @@ end
 -- exactly like the user. The buttons row is above the footer, so the first
 -- occurrence of the label is the button.
 local function press(label)
+    if not (handle and vim.api.nvim_win_is_valid(handle.winid)) then
+        return false
+    end
     local buf_lines = vim.api.nvim_buf_get_lines(handle.bufnr, 0, -1, false)
     for i, line in ipairs(buf_lines) do
         local col = line:find(label, 1, true)
         if col then
             vim.api.nvim_set_current_win(handle.winid)
             vim.api.nvim_win_set_cursor(handle.winid, { i, col - 1 })
+            -- Let any pending fibrous re-render settle so the key lands on the
+            -- button cell that is currently on screen.
+            vim.wait(20)
+            if not vim.api.nvim_win_is_valid(handle.winid) then
+                return false
+            end
+            vim.api.nvim_set_current_win(handle.winid)
             vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
             return true
         end
@@ -151,11 +161,12 @@ end
 -- Press a button and wait for its effect; retry once or twice in case a single
 -- keypress is swallowed by a panel re-render race.
 local function press_until(label, pred, ms)
-    for _ = 1, 4 do
+    for _ = 1, 5 do
         press(label)
-        if wait_for(pred, ms or 6000) then
+        if wait_for(pred, ms or 8000) then
             return true
         end
+        vim.wait(100)
     end
     return false
 end

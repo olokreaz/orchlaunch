@@ -1,7 +1,6 @@
 -- OrchLaunch — external tools list dialog.
 --
--- Engine-agnostic spec, rendered on fibrous when installed and on the kit
--- engine otherwise.
+-- A spec over the fibrous list dialog; the editor it opens is fibrous too.
 
 local M = {}
 
@@ -34,11 +33,7 @@ function M.open()
         end,
     }
 
-    local fibrous = require("orchlaunch.ui.fibrous.list")
-    if fibrous.available() then
-        return fibrous.open(spec)
-    end
-    return require("orchlaunch.ui.dialogs.list").open(spec)
+    return require("orchlaunch.ui.fibrous.list").open(spec)
 end
 
 return M

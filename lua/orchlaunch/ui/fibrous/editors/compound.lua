@@ -1,23 +1,13 @@
 -- OrchLaunch — compound run configuration editor on fibrous.
 
 local form = require("orchlaunch.ui.fibrous.form")
-local util = require("orchlaunch.ui.fibrous.util")
 
 local M = {}
-
---- @return boolean
-function M.available()
-    return util.available()
-end
 
 --- @param existing? OrchCompoundConfiguration
 --- @param on_saved? function
 --- @param opts? table
 function M.open(existing, on_saved, opts)
-    if not util.available() then
-        return require("orchlaunch.ui.editors.compound").open(existing, on_saved, opts)
-    end
-
     local ui = require("fibrous").ui
     local UI = require("orchlaunch.ui")
     local config = require("orchlaunch.config")

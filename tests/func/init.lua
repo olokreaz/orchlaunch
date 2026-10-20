@@ -25,7 +25,6 @@ local log = vim.env.ORCH_FUNC_LOG
 vim.opt.runtimepath:append(plugin)
 if deps and deps ~= "" then
     vim.opt.runtimepath:append(deps .. "/fibrous.nvim")
-    vim.opt.runtimepath:append(deps .. "/volt")
 end
 
 vim.o.swapfile = false

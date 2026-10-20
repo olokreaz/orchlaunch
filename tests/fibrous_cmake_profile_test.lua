@@ -1,8 +1,8 @@
--- Fibrous CMake profile editor (prototype).
+-- Fibrous CMake profile editor.
 --
 -- Opens the fibrous form, drives it through its `.orch` test hooks and verifies
 -- the profile is persisted through `state`. Skips cleanly when fibrous is not
--- installed (the kit editor still backs the fallback list dialog in that case).
+-- installed.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path

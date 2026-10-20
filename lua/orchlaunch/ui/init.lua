@@ -2,20 +2,9 @@
 --
 -- These are the UI-agnostic pieces every screen relies on: notifications, the
 -- text <-> value parsers used by the editors and a tiny theme shim. The widgets
--- themselves live in `orchlaunch.ui.kit`.
+-- themselves live in `orchlaunch.ui.fibrous`.
 
 local M = {}
-
---- @return table The declarative UI builder.
-function M.n()
-    return require("orchlaunch.ui.kit").n()
-end
-
---- @param opts table
---- @return table The window renderer.
-function M.renderer(opts)
-    return require("orchlaunch.ui.kit").renderer(opts)
-end
 
 --- @param message string
 --- @param level? integer
@@ -88,13 +77,7 @@ end
 
 --- Theme shim kept for backwards compatibility with plugin setup.
 function M.apply_theme()
-    local kit = require("orchlaunch.ui.kit")
-    for _, group in ipairs({ "Title", "Comment", "Function", "Constant" }) do
-        pcall(vim.api.nvim_get_hl, 0, { name = group })
-    end
-    pcall(function()
-        vim.api.nvim_set_hl(0, "OrchLaunchBorder", { link = kit.HL.rule })
-    end)
+    pcall(vim.api.nvim_set_hl, 0, "OrchLaunchBorder", { link = "FloatBorder" })
 end
 
 return M

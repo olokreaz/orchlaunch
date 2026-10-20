@@ -1,8 +1,6 @@
 -- OrchLaunch — toolchains list dialog.
 --
--- The screen is engine-agnostic: a spec over the list dialog, rendered on
--- fibrous when it is installed and on the kit engine otherwise. The editor it
--- opens makes the same choice internally.
+-- A spec over the fibrous list dialog; the editor it opens is fibrous too.
 
 local M = {}
 
@@ -36,11 +34,7 @@ function M.open()
         end,
     }
 
-    local fibrous = require("orchlaunch.ui.fibrous.list")
-    if fibrous.available() then
-        return fibrous.open(spec)
-    end
-    return require("orchlaunch.ui.dialogs.list").open(spec)
+    return require("orchlaunch.ui.fibrous.list").open(spec)
 end
 
 return M

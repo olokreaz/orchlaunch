@@ -102,10 +102,7 @@ function M.register()
         pattern = "OrchLaunchDebugStarted",
         callback = function()
             if vim.g.orchlaunch_auto_debug_ui == true then
-                local ui = require("orchlaunch.ui.fibrous.debugger")
-                if ui.available() then
-                    ui.open()
-                end
+                require("orchlaunch.ui.fibrous.debugger").open()
             end
         end,
     })
@@ -114,7 +111,7 @@ function M.register()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.ui.browser").open()
+        require("orchlaunch.ui.fibrous.browser").open()
     end, { desc = "Open the OrchLaunch Run/Debug configurations browser" })
 
     vim.api.nvim_create_user_command("OrchLaunchCreateProject", function(args)
@@ -218,12 +215,7 @@ function M.register()
     })
 
     vim.api.nvim_create_user_command("OrchLaunchDebugger", function()
-        local ui = require("orchlaunch.ui.fibrous.debugger")
-        if ui.available() then
-            ui.open()
-        else
-            notify("the debugger panel needs fibrous.nvim", WARN)
-        end
+        require("orchlaunch.ui.fibrous.debugger").open()
     end, { desc = "Toggle the debugger panel" })
 
     --- @return boolean ok, integer? bufnr, integer? line
@@ -278,19 +270,7 @@ function M.register()
 
     vim.api.nvim_create_user_command("OrchLaunchBreakpoints", function()
         ensure_loaded()
-        local ui = require("orchlaunch.ui.fibrous.breakpoints")
-        if ui.available() then
-            ui.open()
-        else
-            local list = require("orchlaunch.breakpoints").list()
-            if #list == 0 then
-                notify("no breakpoints", WARN)
-            else
-                for _, bp in ipairs(list) do
-                    notify(require("orchlaunch.breakpoints").label(bp))
-                end
-            end
-        end
+        require("orchlaunch.ui.fibrous.breakpoints").open()
     end, { desc = "Manage breakpoints" })
 
     vim.api.nvim_create_user_command("OrchLaunchCheck", function()
@@ -323,12 +303,7 @@ function M.register()
         if not ensure_loaded() then
             return
         end
-        local dialog = require("orchlaunch.ui.fibrous.cmake_profiles")
-        if dialog.available() then
-            dialog.open()
-        else
-            require("orchlaunch.ui.dialogs.cmake_profiles").open()
-        end
+        require("orchlaunch.ui.fibrous.cmake_profiles").open()
     end, { desc = "Manage CMake profiles" })
 
     vim.api.nvim_create_user_command("OrchLaunchCMakeProject", function()

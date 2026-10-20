@@ -3,7 +3,6 @@
 -- A manual profile owns every build setting; a new profile starts from sane
 -- defaults (generator = Ninja, build type = Debug). Preset-derived profiles
 -- (those with `kind`) are read-only and only show their preset description.
--- The kit editor backs it when fibrous is not installed.
 --
 -- The form scaffolding (state, save/close, field navigation, flash jump) comes
 -- from `orchlaunch.ui.fibrous.form`; this module only describes the layout,
@@ -11,14 +10,8 @@
 
 local UI = require("orchlaunch.ui")
 local form = require("orchlaunch.ui.fibrous.form")
-local util = require("orchlaunch.ui.fibrous.util")
 
 local M = {}
-
---- @return boolean
-function M.available()
-    return util.available()
-end
 
 --- Common CMake generators offered in the generator dropdown.
 local GENERATORS = {
@@ -148,10 +141,6 @@ end
 --- @param opts? table
 --- @return table handle
 function M.open(existing, on_saved, opts)
-    if not util.available() then
-        return require("orchlaunch.ui.editors.cmake_profile").open(existing, on_saved, opts)
-    end
-
     local ui = require("fibrous").ui
     local state = require("orchlaunch.state")
 

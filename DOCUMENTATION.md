@@ -109,11 +109,9 @@ The profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`), **Edit**
 **Import** (`i`) and **Project** (`p`, edit the CMake project directory).
 Choosing **Set active** enables the profile.
 
-The editor is a Volt form. Move with `j`/`k` (or arrows), press
-`<CR>` to edit the focused field, `<Space>` to toggle booleans, `<C-s>` to save
-and `q`/`<Esc>` to close. The form is reactive: a signal-driven title paragraph
-tracks the profile name while a summary line reflects the generator, build type,
-toolchain and enabled state as you change them. Sections (Profile, Build,
+The editor is a fibrous form. Move with `Tab`/`Shift+Tab` (or `s` to jump to a
+field by letter), press `<CR>` to edit the focused field, `<Space>` to toggle
+booleans, `<C-s>` to save and `q`/`<Esc>` to close. Sections (Profile, Build,
 Toolchain, Arguments, Variables) are laid out in two columns.
 
 Manual profiles expose every field — name, enabled, toolchain, generator, build
@@ -228,6 +226,28 @@ The active configuration is remembered per project (outside `.orch`, in
 Neovim's state directory) and is what `:OrchLaunchRun` / `:OrchLaunchDebug`
 use when no name is given.
 
+## Debugging
+
+Debug sessions run through `nvim-dap`. Two backends are bundled: LLDB
+(`lldb-dap`/`lldb-vscode`) and GDB (`gdb --interpreter=dap`). Choose per
+configuration with `adapter = "lldb"` or `"gdb"`; `native` configurations launch
+and `remote-debug` configurations attach (`connection = "host:port"`, e.g. after
+`lldb-server gdbserver :1234 -- ./prog`).
+
+The debugger panel (`:OrchLaunchDebugger`) shows threads, frames, scopes and
+variables with Continue/Pause/Step Over/In/Out/Restart/Stop/Toggle BP controls
+and re-renders on session events. Breakpoints support conditions and log points
+and persist per project in `.orch/breakpoints.json`:
+
+- `:OrchLaunchToggleBreakpoint` — toggle at the cursor;
+- `:OrchLaunchBreakpoint <expr>` — conditional breakpoint;
+- `:OrchLaunchLogBreakpoint <msg>` — log point;
+- `:OrchLaunchBreakpoints` / `:OrchLaunchClearBreakpoints` — manage all.
+
+Known limits: attaching to an existing PID may be blocked by
+`kernel.yama.ptrace_scope`; GDB remote-attach to `gdbserver` is not supported
+(LLDB attach is).
+
 ## Commands
 
 | Command | Description |
@@ -246,14 +266,20 @@ use when no name is given.
 | `:OrchLaunchLoadCMake` | Configure the project and load its CMake targets |
 | `:OrchLaunchCreateProject [dir]` | Create a `.orch` project |
 | `:OrchLaunchReload` | Reload all `.orch` files |
+| `:OrchLaunchDebugger` | Open the debugger panel |
+| `:OrchLaunchToggleBreakpoint` | Toggle a breakpoint at the cursor |
+| `:OrchLaunchBreakpoint <expr>` | Set a conditional breakpoint at the cursor |
+| `:OrchLaunchLogBreakpoint <msg>` | Set a log point at the cursor |
+| `:OrchLaunchBreakpoints` | Manage breakpoints |
+| `:OrchLaunchClearBreakpoints` | Clear all breakpoints |
+| `:OrchLaunchCheck` | Check tools and integrations |
 
 Executing Run/Debug supports native configurations, external before-launch
 tools, and `build` / `install` before-launch steps, which run CMake configure
 then build (then install) before the program starts. A native `target` that is
 not a path is resolved to a built executable using the CMake File API artifact
-(see *Loading targets*), falling back to a search in the build directory. DAP
-(debug) integration is reported as not-yet implemented rather than failing
-silently.
+(see *Loading targets*), falling back to a search in the build directory.
+Debug sessions go through nvim-dap; see *Debugging* below.
 
 ## API
 
@@ -344,13 +370,13 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - Target resolution for native/remote: prefer File API artifact (absolute/relative resolved), fallback to filesystem search in build dir for common names.
 - Legacy flat `cmake` object auto-migrated to single profile named `Default`.
 
-### UI (Volt)
-- The whole UI is built on [`nvzone/volt`](https://github.com/nvzone/volt) through a small engine (`ui/kit.lua`) that turns one declarative builder (`UI.n()`) into a floating Volt buffer and exposes the scripting hooks (`get_component_by_id`, `get_focusable_components`, `_save`) used by the tests. Every window shares this single style: `rows`/`columns`/`box` containers, `gap` spacers, `paragraph`/`line`/`text` text and `text_input`/`checkbox`/`select`/`option`/`button` widgets.
-- Browser: list of configurations with active marker, actions (Run/Debug/Edit/Delete/New, Load CMake, Open CMake Profiles/Toolchains/External Tools). Keys: `r`, `d`, `e`, `D`, `A` (set active), `n`, `m` (Load CMake), `C` (CMake profiles), `T` (toolchains), `X` (external tools), `R` (reload).
-- Editors per type: native/remote/compound/toolchain/external tool/CMake project. All forms use the same Volt builder.
-- CMake profile editor (`ui/editors/cmake_profile.lua`) is a Volt form: `j`/`k` move, `<CR>` edits/toggles, `<C-s>` saves, `q`/`<Esc>` closes. Signals drive the live title/summary paragraphs; sections use rows/columns/gap. Manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand). It keeps a `.orch` scripting facade (`fields`, `values`, `set`, `activate`, `save`, `close`, `index_of`) for the tests.
-- List dialogs: generic reusable list with Details pane, actions (New/Edit/Delete/Toggle/Set Active/Import/Project), keyboard mappings (`a,e,D,t,A,i,p`).
-- Project-wide CMake project editor accessible via `p` in CMake profiles manager or `:OrchLaunchCMakeProject`.
+### UI (fibrous)
+- The whole UI is built on [`fibrous.nvim`](https://github.com/mbrea-c/fibrous.nvim). `ui/fibrous/form.lua` provides the shared form scaffolding (state, `<C-s>` save, close, `.orch` test hooks) and `ui/fibrous/fields.lua` the continuous keyboard navigation: `Tab`/`Shift+Tab` step between fields, `s` jumps by letter, `<CR>` enters a field, `<Esc>` leaves a single-line field.
+- Browser (`ui/fibrous/browser.lua`): configurations with an active marker, details pane, actions (`r` run, `d` debug, `e` edit, `a` new, `y` duplicate, `D` delete, `A` set active, `m` load CMake, `q`/`<Esc>` close) and hints for the CMake/toolchain managers.
+- Editors per type: native/remote/compound/toolchain/external tool/CMake project, all using the same form scaffolding.
+- CMake profile editor (`ui/fibrous/cmake_profile.lua`): manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand). It keeps a `.orch` scripting facade (`fields`, `values`, `set`, `save`, `close`) for the tests.
+- List dialogs (`ui/fibrous/list.lua` plus the specs in `ui/dialogs/`): generic list with a details pane and actions (New/Edit/Delete/Toggle/Set Active/Import/Project; `a,e,D,t,A,i,p`).
+- Project-wide CMake project editor accessible via `p` in the CMake profiles manager or `:OrchLaunchCMakeProject`.
 
 ### Commands
 - `:OrchLaunch` / `:OrchLaunchBrowser` — open browser
@@ -366,6 +392,10 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - `:OrchLaunchCMakeProject` — set CMake project directory (cmake.source_dir)
 - `:OrchLaunchImportCMakePresets` — import CMake presets as disabled profiles
 - `:OrchLaunchLoadCMake` — configure and load CMake targets
+- `:OrchLaunchDebugger` — open the debugger panel
+- `:OrchLaunchToggleBreakpoint` / `:OrchLaunchBreakpoint` / `:OrchLaunchLogBreakpoint` — breakpoints
+- `:OrchLaunchBreakpoints` / `:OrchLaunchClearBreakpoints` — manage breakpoints
+- `:OrchLaunchCheck` — check tools and integrations
 
 ### API
 - `orch.setup(opts)` — load project at root or locate .orch

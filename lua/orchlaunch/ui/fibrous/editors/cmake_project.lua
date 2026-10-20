@@ -1,23 +1,13 @@
 -- OrchLaunch — CMake project directory editor on fibrous.
 
 local form = require("orchlaunch.ui.fibrous.form")
-local util = require("orchlaunch.ui.fibrous.util")
 
 local M = {}
-
---- @return boolean
-function M.available()
-    return util.available()
-end
 
 --- Edits the project-wide CMake project directory (`[cmake] source_dir`).
 --- @param on_saved? function
 --- @param opts? table
 function M.open(on_saved, opts)
-    if not util.available() then
-        return require("orchlaunch.ui.editors.cmake_project").open(on_saved, opts)
-    end
-
     local ui = require("fibrous").ui
     local state = require("orchlaunch.state")
 

@@ -1,16 +1,21 @@
--- End-to-end test: the Volt UI engine.
+-- End-to-end test: the fibrous UI.
 --
--- Renders the browser, every editor form and the list dialogs, drives their
--- widgets (text inputs, selects, checkboxes, buttons) and verifies the results
--- are persisted through `state`. This is what a user actually clicks through.
+-- Opens the browser, every editor form and the list dialogs, drives them through
+-- the fibrous handles and verifies the results are persisted through `state`.
+-- This is what a user actually clicks through.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
 local h = require("harness")
 
--- This suite drives the Volt/kit engine's renderer API directly, so it must use
--- the kit implementations even when fibrous happens to be installed.
-vim.g.orchlaunch_use_fibrous = false
+vim.o.columns = 140
+vim.o.lines = 44
+
+if not (pcall(require, "fibrous")) then
+    print("SKIP  fibrous is not installed")
+    h.done("fibrous UI end-to-end (skipped)")
+    return
+end
 
 local notifications = {}
 vim.notify = function(msg)
@@ -30,126 +35,93 @@ local function noted(fragment)
     return false
 end
 
---- Concatenates every rendered form line (the engine paints Volt virtual text).
-local function screen_text()
-    return require("orchlaunch.ui.kit").rendered_text()
-end
-
---- Presses the first focusable button whose rendered label contains `fragment`.
-local function press(renderer, fragment)
-    for _, component in ipairs(renderer:get_focusable_components()) do
-        local props = component:get_props()
-        if type(props.on_press) == "function"
-            and type(props.lines) == "string"
-            and props.lines:find(fragment, 1, true)
-        then
-            props.on_press(component)
-            return true
-        end
-    end
-
-    -- Forms no longer render action buttons; the `<C-s>` mapping saves instead.
-    if fragment == "Save" and type(renderer._save) == "function" then
-        renderer._save()
-        return true
-    end
-
-    return false
-end
-
---- Sets the value of a widget by id (no-op when missing).
-local function set(renderer, id, value)
-    local component = renderer:get_component_by_id(id)
-    if component then
-        component:set_current_value(value)
-        return true
-    end
-    return false
+local function screen(handle)
+    return table.concat(vim.api.nvim_buf_get_lines(handle.bufnr, 0, -1, false), "\n")
 end
 
 local root = h.tempdir()
 local orch = require("orchlaunch")
 local state = require("orchlaunch.state")
 local config = require("orchlaunch.config")
-local cmake = require("orchlaunch.cmake")
 
-orch.create_project(root)
-state.add_toolchain(config.toolchain({
-    name = "Gcc", type = "system", cmake = "cmake", c = "gcc", cxx = "g++", debugger = "gdb",
-}))
-state.add_external_tool(config.external_tool({ name = "gen", program = "${workspace}/gen" }))
-state.add_configuration(config.native({
-    name = "Game", target = "/bin/echo", args = { "-x" }, console = config.console({ mode = "embedded" }),
-}))
-state.add_configuration(config.remote_debug({
-    name = "Attach", symbol = "game", connection = "localhost:1234", adapter = "gdb",
-}))
-state.add_configuration(config.compound({ name = "All", configurations = { "Game", "Attach" } }))
-state.add_cmake_profile(config.cmake_settings({ name = "Debug", build_type = "Debug" }))
-state.save()
-
--- Make CMake targets available to the editors without a real configure.
--- Reloading clears runtime data, so this is re-armed after every reload.
 local function arm_targets()
+    local cmake = require("orchlaunch.cmake")
+    state.set_runtime("cmake_source_dir", cmake.source_dir())
+    state.set_runtime("cmake_binary_dir", cmake.binary_dir())
     state.set_runtime("cmake_targets", {
         { name = "hello", type = "EXECUTABLE" },
         { name = "greet", type = "STATIC_LIBRARY" },
     })
-    state.set_runtime("cmake_source_dir", cmake.source_dir())
 end
+
+
+orch.create_project(root)
+state.add_toolchain(config.toolchain({
+    name = "Gcc",
+    type = "system",
+    cmake = "cmake",
+    c = "gcc",
+    cxx = "g++",
+    debugger = "gdb",
+}))
+state.add_external_tool(config.external_tool({ name = "gen", program = "${workspace}/gen" }))
+state.add_configuration(config.native({ name = "Game", target = "hello" }))
+state.add_configuration(config.remote_debug({
+    name = "Attach",
+    symbol = "hello",
+    connection = "localhost:1234",
+    adapter = "gdb",
+}))
+state.add_configuration(config.compound({ name = "All", configurations = { "Game", "Attach" } }))
+state.add_cmake_profile(config.cmake_settings({ name = "Debug", build_type = "Debug" }))
+state.set_active_cmake_profile("Debug")
+state.save()
 arm_targets()
 
 -- ============================================================================
 -- 1. browser
 -- ============================================================================
-local browser = require("orchlaunch.ui.browser").open()
-vim.wait(300)
-h.check("browser renders", browser ~= nil)
-h.check("browser list component", browser:get_component_by_id("orch_list") ~= nil)
-h.check("browser details component", browser:get_component_by_id("orch_details") ~= nil)
-local btext = screen_text()
+local browser = require("orchlaunch.ui.fibrous.browser").open()
+vim.wait(200)
+h.check("browser renders", browser ~= nil and vim.api.nvim_win_is_valid(browser.winid))
+local btext = screen(browser)
 h.contains("browser title", btext, "Run / Debug Configurations")
-h.contains("browser lists configurations", btext, "Game")
-h.contains("browser list shows type", btext, "native")
-h.contains("browser Run button", btext, "Run (r)")
-h.contains("browser Debug button", btext, "Debug (d)")
-h.contains("browser New button", btext, "New (a)")
-h.contains("browser Duplicate button", btext, "Duplicate (y)")
-h.contains("browser Delete button", btext, "Delete (D)")
-h.contains("browser Set Active button", btext, "Set Active (A)")
-h.contains("browser Toolchains entry", btext, "Toolchains")
-h.contains("browser External Tools entry", btext, "External Tools")
-h.contains("browser CMake entry", btext, "CMake")
-h.contains("browser Load CMake button", btext, "Load CMake (m)")
-browser:close()
-vim.wait(50)
+h.contains("browser lists Game", btext, "Game")
+h.contains("browser lists Attach", btext, "Attach")
+h.contains("browser lists All", btext, "All")
+h.contains("browser New config action", btext, "New config")
+h.contains("browser Edit action", btext, "Edit")
+h.contains("browser Delete action", btext, "Delete")
+h.contains("browser Set Active action", btext, "Set Active")
+h.contains("browser Load CMake action", btext, "Load CMake")
+h.contains("browser Run hint", btext, "Run")
+h.contains("browser Debug hint", btext, "Debug")
+browser.unmount()
 
 -- ============================================================================
 -- 2. native editor — full round trip
 -- ============================================================================
 local saved_native = false
-local r = require("orchlaunch.ui.editors.native").open(nil, function()
+local r = require("orchlaunch.ui.fibrous.editors.native").open(nil, function()
     saved_native = true
 end)
-vim.wait(300)
-h.check("native editor has name field", r:get_component_by_id("name") ~= nil)
-h.check("native editor has CMake target select", r:get_component_by_id("target_choice") ~= nil)
-h.check("native editor has console chooser", r:get_component_by_id("console_mode") ~= nil)
+vim.wait(200)
+h.check("native editor has name field", r.orch.values.name == "")
+r.orch.set("name", "NewNative")
+r.orch.set("target_choice", "hello")
+r.orch.set("cwd", "${workspace}/run")
+r.orch.set("args", "-x\n-y")
+r.orch.set("environment", "A=1\nB=2")
+r.orch.set("console_mode", "hidden")
+r.orch.set("keep_open", false)
+r.orch.set("clear_on_start", false)
+r.orch.set("before_build", true)
+r.orch.set("before_external", "gen")
+vim.wait(50)
+r.orch.save()
+vim.wait(100)
 
-set(r, "name", "NewNative")
-set(r, "target_choice", { id = "hello" })
-set(r, "cwd", "${workspace}/run")
-set(r, "args", "-x\n-y")
-set(r, "environment", "A=1\nB=2")
-set(r, "console_mode", { id = "hidden" })
-set(r, "keep_open", false)
-set(r, "clear_on_start", false)
-set(r, "before_build", true)
-set(r, "before_external", "gen")
-
-h.check("native editor Save button pressed", press(r, "Save"), "no Save button found")
 h.check("native editor on_saved fired", saved_native)
-
 state.reload()
 arm_targets()
 local native = state.configuration("NewNative")
@@ -164,30 +136,31 @@ h.eq("native clear_on_start persisted", native and native.console.clear_on_start
 h.eq("native before build flag", native and native.before.tools[1], "build")
 h.eq("native before external tool", native and native.before.tools[2].tool, "gen")
 
--- duplicate name is rejected
+-- duplicate name is rejected and the editor stays open
 notifications = {}
-local dup = require("orchlaunch.ui.editors.native").open(nil, nil)
-vim.wait(200)
-set(dup, "name", "Game")
-press(dup, "Save")
-h.check("native editor rejects a duplicate name", noted("already exists"), last_notify())
-dup:close()
+local dup = require("orchlaunch.ui.fibrous.editors.native").open(nil, nil)
+vim.wait(150)
+dup.orch.set("name", "Game")
+dup.orch.save()
 vim.wait(50)
+h.check("native editor rejects a duplicate name", noted("already exists"), last_notify())
+h.check("duplicate editor stays open", vim.api.nvim_win_is_valid(dup.winid))
+dup.orch.close()
 
 -- ============================================================================
 -- 3. remote debug editor
 -- ============================================================================
 local saved_remote = false
-local rr = require("orchlaunch.ui.editors.remote").open(nil, function()
+local rr = require("orchlaunch.ui.fibrous.editors.remote").open(nil, function()
     saved_remote = true
 end)
-vim.wait(300)
-h.check("remote editor has symbol select", rr:get_component_by_id("symbol_choice") ~= nil)
-set(rr, "name", "Remote2")
-set(rr, "symbol_choice", { id = "hello" })
-set(rr, "connection", "host:9000")
-set(rr, "adapter", "lldb")
-h.check("remote editor Save pressed", press(rr, "Save"))
+vim.wait(150)
+rr.orch.set("name", "Remote2")
+rr.orch.set("symbol_choice", "hello")
+rr.orch.set("connection", "host:9000")
+rr.orch.set("adapter", "lldb")
+rr.orch.save()
+vim.wait(100)
 h.check("remote editor on_saved fired", saved_remote)
 state.reload()
 arm_targets()
@@ -201,13 +174,14 @@ h.eq("remote adapter persisted", remote and remote.adapter, "lldb")
 -- 4. compound editor
 -- ============================================================================
 local saved_compound = false
-local rc = require("orchlaunch.ui.editors.compound").open(nil, function()
+local rc = require("orchlaunch.ui.fibrous.editors.compound").open(nil, function()
     saved_compound = true
 end)
-vim.wait(300)
-set(rc, "name", "All2")
-set(rc, "configurations", "Game\nRemote2")
-h.check("compound editor Save pressed", press(rc, "Save"))
+vim.wait(150)
+rc.orch.set("name", "All2")
+rc.orch.set("configurations", "Game\nRemote2")
+rc.orch.save()
+vim.wait(100)
 h.check("compound editor on_saved fired", saved_compound)
 state.reload()
 arm_targets()
@@ -219,18 +193,18 @@ h.eq("compound children persisted", compound and compound.configurations, { "Gam
 -- 5. toolchain editor
 -- ============================================================================
 local saved_tc = false
-local rt = require("orchlaunch.ui.editors.toolchain").open(nil, function()
+local rt = require("orchlaunch.ui.fibrous.editors.toolchain").open(nil, function()
     saved_tc = true
 end)
-vim.wait(300)
-h.check("toolchain editor has type chooser", rt:get_component_by_id("type") ~= nil)
-set(rt, "name", "Clang")
-set(rt, "type", { id = "system" })
-set(rt, "cmake", "cmake")
-set(rt, "c", "clang")
-set(rt, "cxx", "clang++")
-set(rt, "debugger", "lldb")
-h.check("toolchain editor Save pressed", press(rt, "Save"))
+vim.wait(150)
+rt.orch.set("name", "Clang")
+rt.orch.set("type", "system")
+rt.orch.set("cmake", "cmake")
+rt.orch.set("c", "clang")
+rt.orch.set("cxx", "clang++")
+rt.orch.set("debugger", "lldb")
+rt.orch.save()
+vim.wait(100)
 h.check("toolchain editor on_saved fired", saved_tc)
 state.reload()
 arm_targets()
@@ -243,15 +217,16 @@ h.eq("toolchain type", tc and tc.type, "system")
 -- 6. external tool editor
 -- ============================================================================
 local saved_ext = false
-local rext = require("orchlaunch.ui.editors.external_tool").open(nil, function()
+local rext = require("orchlaunch.ui.fibrous.editors.external_tool").open(nil, function()
     saved_ext = true
 end)
-vim.wait(300)
-set(rext, "name", "gen2")
-set(rext, "program", "${workspace}/tools/gen")
-set(rext, "args", "--release\n--verbose")
-set(rext, "cwd", "${workspace}")
-h.check("external editor Save pressed", press(rext, "Save"))
+vim.wait(150)
+rext.orch.set("name", "gen2")
+rext.orch.set("program", "${workspace}/tools/gen")
+rext.orch.set("args", "--release\n--verbose")
+rext.orch.set("cwd", "${workspace}")
+rext.orch.save()
+vim.wait(100)
 h.check("external editor on_saved fired", saved_ext)
 state.reload()
 arm_targets()
@@ -264,33 +239,36 @@ h.eq("external tool args", ext and ext.args, { "--release", "--verbose" })
 -- 7. toolchains list dialog
 -- ============================================================================
 local tl = require("orchlaunch.ui.dialogs.toolchains").open()
-vim.wait(300)
-local tl_text = screen_text()
-h.check("toolchains dialog list", tl:get_component_by_id("orch_list") ~= nil)
+vim.wait(200)
+local tl_text = screen(tl)
 h.contains("toolchains dialog title", tl_text, "Toolchains")
 h.contains("toolchains dialog lists items", tl_text, "Gcc")
-h.contains("toolchains dialog new hint", tl_text, "New chain (a)")
 h.contains("toolchains dialog details", tl_text, "Debugger")
-tl:close()
-vim.wait(50)
+tl.unmount()
 
 -- ============================================================================
--- 8. CMake profiles dialog
+-- 8. external tools dialog
 -- ============================================================================
-local cp = require("orchlaunch.ui.dialogs.cmake_profiles").open()
-vim.wait(300)
-local cp_text = screen_text()
-h.check("cmake profiles dialog list", cp:get_component_by_id("orch_list") ~= nil)
+local te = require("orchlaunch.ui.dialogs.external_tools").open()
+vim.wait(200)
+local te_text = screen(te)
+h.contains("external tools dialog title", te_text, "External Tools")
+h.contains("external tools dialog lists items", te_text, "gen")
+te.unmount()
+
+-- ============================================================================
+-- 9. CMake profiles dialog
+-- ============================================================================
+local cp = require("orchlaunch.ui.fibrous.cmake_profiles").open()
+vim.wait(200)
+local cp_text = screen(cp)
 h.contains("cmake profiles dialog title", cp_text, "CMake Profiles")
 h.contains("cmake profiles active marker", cp_text, "●")
-h.contains("cmake profiles set active hint", cp_text, "Set Active")
-h.contains("cmake profiles import hint", cp_text, "Import presets")
-h.contains("cmake profiles project hint", cp_text, "Project")
-cp:close()
-vim.wait(50)
+h.contains("cmake profiles list", cp_text, "Debug")
+cp.unmount()
 
 -- ============================================================================
--- 9. shared UI helpers
+-- 10. shared UI helpers
 -- ============================================================================
 local UI = require("orchlaunch.ui")
 h.eq("UI.lines", UI.lines("a\n\n b \n"), { "a", "b" })
@@ -298,4 +276,4 @@ h.eq("UI.parse_env", UI.parse_env("A=1\nBAD\nB=2"), { A = "1", B = "2" })
 h.eq("UI.format_env", UI.format_env({ B = "2", A = "1" }), "A=1\nB=2")
 h.eq("UI.format_lines", UI.format_lines({ "x", "y" }), "x\ny")
 
-h.done("UI end-to-end")
+h.done("fibrous UI end-to-end")

@@ -1,22 +1,12 @@
 -- OrchLaunch — toolchain editor on fibrous.
 
 local form = require("orchlaunch.ui.fibrous.form")
-local util = require("orchlaunch.ui.fibrous.util")
 
 local M = {}
-
---- @return boolean
-function M.available()
-    return util.available()
-end
 
 --- @param existing? OrchToolchain
 --- @param on_saved? function
 function M.open(existing, on_saved)
-    if not util.available() then
-        return require("orchlaunch.ui.editors.toolchain").open(existing, on_saved)
-    end
-
     local ui = require("fibrous").ui
     local UI = require("orchlaunch.ui")
     local config = require("orchlaunch.config")

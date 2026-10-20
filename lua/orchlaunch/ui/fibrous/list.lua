@@ -1,7 +1,6 @@
 -- OrchLaunch — generic fibrous list dialog.
 --
--- A name + details browser with a create/edit/delete workflow, replacing the
--- kit engine in `orchlaunch.ui.dialogs.list` for the fibrous stack. Concrete
+-- A name + details browser with a create/edit/delete workflow. Concrete
 -- dialogs supply a spec; only their title, labels, detail formatter, editor
 -- and (optional) extra actions differ.
 --

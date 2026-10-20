@@ -76,32 +76,32 @@ check("build produces artifact", (function()
 end)())
 
 -- 3. editor target select ----------------------------------------------------
-local editor = require("orchlaunch.ui.editors.native")
-local saved = false
+if not (pcall(require, "fibrous")) then
+    print("SKIP  editor target select (fibrous is not installed)")
+else
+    local editor = require("orchlaunch.ui.fibrous.editors.native")
+    local saved = false
+    local handle
 
-check("open native with target select", pcall(function()
-    local renderer = editor.open(nil, function()
-        saved = true
-    end)
-    vim.wait(300)
+    check("open native with target select", pcall(function()
+        handle = editor.open(nil, function()
+            saved = true
+        end)
+        vim.wait(200)
+        assert(handle and handle.orch, "editor test hooks missing")
+        handle.orch.set("name", "Hello")
+        handle.orch.set("target_choice", "hello")
+        handle.orch.save()
+        vim.wait(100)
+    end))
 
-    local select = renderer:get_component_by_id("target_choice")
-    assert(select ~= nil, "target_choice select missing")
-    select:set_current_value({ id = "hello" })
-
-    local name_input = renderer:get_component_by_id("name")
-    name_input:set_current_value("Hello")
-
-    assert(renderer._save, "save handler missing")
-    renderer._save()
-end))
-
-check("on_saved fired", saved == true)
-state.reload()
-check("target persisted from select", (function()
-    local cfg = state.configuration("Hello")
-    return cfg ~= nil and cfg.target == "hello"
-end)(), vim.inspect(state.configuration("Hello")))
+    check("on_saved fired", saved == true)
+    state.reload()
+    check("target persisted from select", (function()
+        local cfg = state.configuration("Hello")
+        return cfg ~= nil and cfg.target == "hello"
+    end)(), vim.inspect(state.configuration("Hello")))
+end
 
 print(failures == 0 and "\nALL PASS" or ("\n" .. failures .. " FAILURE(S)"))
 if failures > 0 then

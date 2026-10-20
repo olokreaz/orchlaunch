@@ -83,32 +83,37 @@ vim.notify = function(msg)
     notifications[#notifications + 1] = tostring(msg)
 end
 
-local editor = require("orchlaunch.ui.editors.cmake_profile")
-local closed = false
-local popup = editor.open(state.cmake_profile("debug"), function()
-    closed = true
-end)
-vim.wait(200)
+if not (pcall(require, "fibrous")) then
+    print("SKIP  preset profile editor (fibrous is not installed)")
+else
+    local editor = require("orchlaunch.ui.fibrous.cmake_profile")
+    local closed = false
+    local popup = editor.open(state.cmake_profile("debug"), function()
+        closed = true
+    end)
+    vim.wait(150)
 
-eq(popup ~= nil and popup.orch ~= nil, true, "preset editor renders")
-eq(popup.orch.readonly, true, "preset profile is read-only")
+    eq(popup ~= nil and popup.orch ~= nil, true, "preset editor renders")
+    eq(popup.orch.readonly, true, "preset profile is read-only")
 
-local fields = {}
-for _, field in ipairs(popup.orch.fields or {}) do
-    fields[field.id] = true
+    local fields = {}
+    for _, field in ipairs(popup.orch.fields or {}) do
+        fields[field.id] = true
+    end
+
+    eq(fields.kind, true, "preset profile shows source")
+    eq(fields.configure_preset, true, "preset profile shows configure preset")
+    eq(fields.toolchain, nil, "preset profile hides toolchain")
+
+    local count = #notifications
+    popup.orch.save()
+    vim.wait(50)
+    eq(#notifications > count, true, "preset profile save rejected")
+
+    popup.orch.close()
+    vim.wait(50)
+    eq(closed, true, "preset profile close callback fired")
 end
-
-eq(fields.kind, true, "preset profile shows source")
-eq(fields.configure_preset, true, "preset profile shows configure preset")
-eq(fields.toolchain, nil, "preset profile hides toolchain")
-
-local count = #notifications
-popup.orch.save()
-eq(#notifications > count, true, "preset profile save rejected")
-
-popup.orch.close(false)
-vim.wait(50)
-eq(closed, true, "preset profile close callback fired")
 
 state.reload()
 local reloaded = state.cmake_profile("debug")

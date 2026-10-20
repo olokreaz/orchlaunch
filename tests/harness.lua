@@ -27,7 +27,7 @@ deps_roots[#deps_roots + 1] = vim.fn.stdpath("data") .. "/lazy"
 deps_roots[#deps_roots + 1] = vim.fn.stdpath("data") .. "/site/pack/deps/start"
 deps_roots[#deps_roots + 1] = vim.fn.stdpath("data") .. "/site/pack/core/opt"
 
-for _, name in ipairs({ "volt", "fibrous.nvim" }) do
+for _, name in ipairs({ "fibrous.nvim" }) do
     for _, deps in ipairs(deps_roots) do
         local path = deps .. "/" .. name
         if vim.fn.isdirectory(path) == 1 then

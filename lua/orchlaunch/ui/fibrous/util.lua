@@ -8,9 +8,6 @@ local M = {}
 
 --- @return boolean Whether fibrous.nvim can be required.
 function M.available()
-    if vim.g.orchlaunch_use_fibrous == false then
-        return false
-    end
     return (pcall(require, "fibrous")) == true
 end
 

@@ -2,8 +2,7 @@
 --
 -- A thin spec over `orchlaunch.ui.fibrous.list`: the CMake profile list is just
 -- the generic list dialog with a CMake-flavoured label, details formatter and
--- the presets-import / project-editor actions. Callers fall back to the kit
--- implementation when fibrous is not installed.
+-- the presets-import / project-editor actions.
 
 local list = require("orchlaunch.ui.fibrous.list")
 
@@ -51,10 +50,6 @@ end
 --- Opens the fibrous CMake profiles dialog.
 --- @return table handle
 function M.open()
-    if not M.available() then
-        return require("orchlaunch.ui.dialogs.cmake_profiles").open()
-    end
-
     local state = require("orchlaunch.state")
     local profile_editor = require("orchlaunch.ui.fibrous.cmake_profile")
     local project_editor = require("orchlaunch.ui.fibrous.editors.cmake_project")
