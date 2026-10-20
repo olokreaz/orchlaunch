@@ -161,6 +161,15 @@ function M.open(spec)
     end
 
     local mount_opts = { zindex = 50 }
+    -- Restore the window focused before the dialog opened (it may itself be a
+    -- float, in which case Neovim would otherwise fall back to the editor).
+    local origin_winid = vim.api.nvim_get_current_win()
+    mount_opts.on_unmount = function()
+        if origin_winid and vim.api.nvim_win_is_valid(origin_winid)
+            and vim.api.nvim_get_current_win() ~= origin_winid then
+            pcall(vim.api.nvim_set_current_win, origin_winid)
+        end
+    end
 
     local function Body(ctx)
         revision = ctx.use_state(0)

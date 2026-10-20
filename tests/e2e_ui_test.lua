@@ -271,6 +271,24 @@ h.contains("cmake profiles list", cp_text, "Debug")
 cp.unmount()
 
 -- ============================================================================
+-- 9b. focus returns to the parent dialog after closing an editor
+-- ============================================================================
+local tl = require("orchlaunch.ui.dialogs.toolchains").open()
+vim.wait(150)
+h.check("toolchains list opens", tl ~= nil and vim.api.nvim_win_is_valid(tl.winid))
+local list_win = tl.winid
+local toolchain = state.toolchains().toolchains[1]
+local form = require("orchlaunch.ui.fibrous.editors.toolchain").open(toolchain, function() end)
+vim.wait(100)
+h.eq("toolchain editor is focused", vim.api.nvim_get_current_win(), form.winid)
+vim.api.nvim_feedkeys("q", "x", false)
+vim.wait(100)
+h.eq("focus returns to the toolchains list", vim.api.nvim_get_current_win(), list_win)
+h.check("toolchains list survives editor close", vim.api.nvim_win_is_valid(list_win))
+tl.unmount()
+vim.wait(50)
+
+-- ============================================================================
 -- 10. shared UI helpers
 -- ============================================================================
 local UI = require("orchlaunch.ui")

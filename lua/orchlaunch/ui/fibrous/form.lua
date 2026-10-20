@@ -262,18 +262,26 @@ function M.open(opts)
     end
 
     apply_size()
+    -- A float does not restore the window that was focused before it opened
+    -- (the list/browser dialog is a float too). Remember it and hand focus back
+    -- on close, otherwise it falls through to the underlying editor.
+    local origin_winid = vim.api.nvim_get_current_win()
     mount_opts.on_unmount = function()
         cleanup()
         if opts.on_saved then
             opts.on_saved()
+        end
+        if origin_winid and vim.api.nvim_win_is_valid(origin_winid)
+            and vim.api.nvim_get_current_win() ~= origin_winid then
+            pcall(vim.api.nvim_set_current_win, origin_winid)
         end
     end
 
     handle = nr.mount(editor, {}, mount_opts)
     handle.focus()
 
-    vim.keymap.set("n", "q", close, { nowait = true, silent = true })
-    vim.keymap.set({ "n", "i" }, "<C-s>", save, { nowait = true, silent = true })
+    vim.keymap.set("n", "q", close, { buffer = handle.bufnr, nowait = true, silent = true })
+    vim.keymap.set({ "n", "i" }, "<C-s>", save, { buffer = handle.bufnr, nowait = true, silent = true })
     vim.keymap.set("n", "<Esc>", close, { buffer = handle.bufnr, nowait = true, silent = true })
 
     if opts.extra_keymaps then
