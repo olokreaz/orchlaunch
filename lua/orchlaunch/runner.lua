@@ -333,9 +333,18 @@ function M.run_active(opts)
     return name
 end
 
---- Creates a native run configuration for every executable CMake target that
---- does not have one yet. The working directory is the CMake build directory,
---- and the target field is preset to the target name.
+--- Maps a CMake target type to the run-configuration runtime kind.
+local TARGET_RUNTIME = {
+    EXECUTABLE = "executable",
+    STATIC_LIBRARY = "static",
+    SHARED_LIBRARY = "shared",
+}
+
+--- Creates a native run configuration for every CMake target that does not have
+--- one yet. Executables carry the target name in `target`; static/shared
+--- libraries have no executable, so their `target` stays empty and only the
+--- runtime kind is recorded. Existing configurations (including ones created
+--- by hand before the File API was parsed) are left untouched.
 ---@param targets OrchCMakeTarget[]
 ---@return integer created
 local function sync_target_configurations(targets)
@@ -344,18 +353,18 @@ local function sync_target_configurations(targets)
     local created = 0
 
     for _, target in ipairs(targets) do
-        if target.type == "EXECUTABLE" and not state.configuration(target.name) then
+        local runtime = TARGET_RUNTIME[target.type]
+        if runtime and not state.configuration(target.name) then
             state.add_configuration(config.native({
                 name = target.name,
-                target = target.name,
+                target = runtime == "executable" and target.name or nil,
+                runtime = runtime,
                 cwd = build_dir,
             }))
+            -- Persist immediately: the configuration exists from this moment on.
+            state.save()
             created = created + 1
         end
-    end
-
-    if created > 0 then
-        ensure_settings_saved()
     end
 
     return created
@@ -363,8 +372,8 @@ end
 
 --- Configures the project and discovers its CMake targets (File API).
 ---
---- Executable targets are turned into native run configurations (unless a
---- configuration with the same name already exists).
+--- Every executable/static/shared target is turned into a native run
+--- configuration (unless a configuration with the same name already exists).
 ---@return OrchCMakeTarget[]?
 function M.load_cmake()
     if not state.is_loaded() then

@@ -51,7 +51,8 @@
 ---@class OrchNativeConfiguration
 ---@field name string
 ---@field type "native"
----@field target? string CMake target or executable path.
+---@field target? string CMake target or executable path (nil for libraries).
+---@field runtime? "executable"|"static"|"shared" CMake target kind.
 ---@field cwd? OrchPath
 ---@field args? string[]
 ---@field inherit_env? boolean

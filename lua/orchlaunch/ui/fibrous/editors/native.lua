@@ -24,10 +24,11 @@ function M.open(existing, on_saved, opts)
     return form.open({
         augroup = "OrchlaunchFibrousNative",
         title = "  Native configuration",
-        size = { width = 108, height = 30 },
+        size = { width = 108, height = 32 },
         on_saved = on_saved,
         initial = {
             name = existing.name or "",
+            runtime = existing.runtime or "executable",
             target = existing.target or "",
             target_choice = (matched and existing.target) or form.CUSTOM_TARGET,
             cwd = existing.cwd or "",
@@ -63,6 +64,7 @@ function M.open(existing, on_saved, opts)
                 comp = ui.col,
                 props = { grow = 1, gap = 1 },
                 children = {
+                    f.field_label("Runtime", f.select("runtime", { "executable", "static", "shared" })),
                     f.field_label("Console", f.select("console_mode", { "embedded", "hidden", "none" })),
                     f.check("keep_open", { label = "Keep console open" }),
                     f.check("clear_on_start", { label = "Clear console on start" }),
@@ -87,8 +89,10 @@ function M.open(existing, on_saved, opts)
             if not existing.name and state.configuration(name) then
                 error(("configuration already exists: %s"):format(name))
             end
+            local runtime = values.runtime or "executable"
             return config.native({
                 name = name,
+                runtime = runtime,
                 target = form.read_target(values, targets, "target", "target_choice"),
                 cwd = UI.trimmed(values.cwd),
                 args = UI.lines(values.args),

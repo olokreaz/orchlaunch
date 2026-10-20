@@ -409,6 +409,7 @@ end
 ---@class OrchNativeOptions
 ---@field name string
 ---@field target? string
+---@field runtime? "executable"|"static"|"shared"
 ---@field cwd? string
 ---@field args? string[]
 ---@field inherit_env? boolean
@@ -426,6 +427,7 @@ function M.native(opts)
         name = opts.name,
         type = "native",
         target = opts.target,
+        runtime = opts.runtime,
         cwd = opts.cwd,
         args = opts.args,
         inherit_env = opts.inherit_env ~= false,

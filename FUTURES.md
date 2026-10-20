@@ -24,7 +24,7 @@
 - [x] `source_dir()`/`binary_dir()`/`install_dir()` (учитывает configure preset + source_dir проекта)
 - [x] CMake File API: `prepare_file_api`, `read_targets`, `load_targets`, кеширование + fallback на последний reply при падении reconfigure
 - [x] `targets()`, `target(name)`, `find_target(name)` (ищет артефакт + файловый поиск)
-- [x] Автосоздание native run-конфигураций для EXECUTABLE-таргетов (`runner.sync_target_configurations`, вызывается из `load_cmake`)
+- [x] Автосоздание native run-конфигураций для всех таргетов: executable, static, shared (`runner.sync_target_configurations`); у библиотек `target` пуст, сохраняется `runtime`
 
 ## Запуск/Debug (runner)
 - [x] `run(name, {mode=run|debug})`, `run_active`, `run_external_tool(name)`

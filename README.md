@@ -38,7 +38,8 @@ target discovery — driven from JSON files inside a `.orch` project.
   resolves `inherits` and `include`, expands macros, and can import presets as
   disabled profiles.
 - **CMake target discovery** — via the CMake File API (`codemodel-v2`), with
-  automatic native run configurations for executable targets.
+  automatic native run configurations for every target (executables, static and
+  shared libraries).
 - **Run/Debug browser** — a [fibrous.nvim](https://github.com/mbrea-c/fibrous.nvim)-based UI
   for the list, details and every manager, backed by plain JSON on disk.
 - **Active configuration** — remembered per project (outside `.orch`).
@@ -107,7 +108,8 @@ Then, in the browser:
 1. **Toolchains…** — add a toolchain (compiler/cmake/debugger).
 2. **CMake…** — create/select a CMake profile (or **Import** presets).
 3. **Load CMake (m)** — configure and discover CMake targets; native run
-   configurations are created for every executable target.
+   configurations are created for every target. Executables point at their
+   artifact; static/shared libraries keep the executable field empty.
 4. **New (a)** — add a configuration, pick a target, save with `<C-s>`.
 5. **Run (r)** — run the active/selected configuration.
 
@@ -231,9 +233,11 @@ reads back target names, types and artifact paths.
 - The **last File API reply on disk is reused** when a reconfigure fails (e.g. a
   missing toolchain) and automatically in a fresh session, so targets stay
   available without reconfiguring.
-- Loading targets **creates a native run configuration for every executable
-  target** that does not have one yet (name = target, target = target, cwd =
-  build directory). Existing configurations are never touched.
+- Loading targets **creates a native run configuration for every target** that
+  does not have one yet (name = target, cwd = build directory). Executables set
+  `target` to the target name; static/shared libraries leave it empty and record
+  `runtime = "static"|"shared"`. Existing configurations (including hand-made
+  ones) are never touched and their runtime is preserved.
 
 ## UI
 

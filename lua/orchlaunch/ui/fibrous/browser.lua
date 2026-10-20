@@ -41,6 +41,7 @@ local function format_details(active, cfg)
     }
 
     if cfg.type == "native" then
+        lines[#lines + 1] = ("Runtime:  %s"):format(cfg.runtime or "executable")
         lines[#lines + 1] = ("Target:  %s"):format(cfg.target or "—")
         lines[#lines + 1] = ("Working dir:  %s"):format(cfg.cwd or "${workspace}")
         lines[#lines + 1] = ("Arguments:  %s"):format(#(cfg.args or {}) > 0 and table.concat(cfg.args, " ") or "—")

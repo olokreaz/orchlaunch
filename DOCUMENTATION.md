@@ -162,11 +162,15 @@ free-form executable-path field (`(executable path…)`). Choosing a target stor
 its name; running it resolves to the artifact path reported by CMake, falling
 back to a filesystem search in the build directory.
 
-Loading targets also creates a native run configuration for every
-**executable** target that does not have one yet. The configuration is named
-after the target, its target field is set to that name, and its working
-directory is the CMake build directory. Existing configurations are never
-touched, so this is safe to run repeatedly.
+Loading targets also creates a native run configuration for every CMake
+target that does not have one yet (executables, static and shared libraries).
+The configuration is named after the target, its working directory is the CMake
+build directory and its `runtime` records the target kind. Executables set
+`target` to the target name; static and shared libraries have no executable, so
+their `target` stays empty. Existing configurations are never touched — a
+configuration created by hand before the File API is parsed keeps its runtime
+and executable — and each new configuration is saved immediately, so this is
+safe to run repeatedly.
 
 ## Run configurations — `run_configurations.json`
 
@@ -179,6 +183,7 @@ One configuration is used for both Run and Debug. There is no separate
     {
       "name": "Game",
       "type": "native",
+      "runtime": "executable",
       "target": "game",
       "args": ["-dev", "-console"],
       "console": { "mode": "embedded", "keep_open": true, "clear_on_start": true },
@@ -188,7 +193,8 @@ One configuration is used for both Run and Debug. There is no separate
 }
 ```
 
-Supported types: `native`, `remote-debug`, `compound`.
+Supported types: `native`, `remote-debug`, `compound`. For `native`, `runtime`
+is `executable`, `static` or `shared`; only executables have a `target`.
 
 ## External tools — `external_tools.json`
 

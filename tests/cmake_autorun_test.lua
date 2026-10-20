@@ -1,5 +1,6 @@
 -- Integration test: loading CMake targets auto-creates native run
--- configurations for executable targets (cwd = build dir), without duplicates.
+-- configurations for executables and libraries (cwd = build dir), without
+-- duplicates. Libraries keep an empty executable and record their runtime.
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
 require("harness")
@@ -28,6 +29,7 @@ cmake_minimum_required(VERSION 3.15)
 project(autorun C)
 add_executable(hello main.c)
 add_library(greet STATIC greet.c)
+add_library(shared SHARED greet.c)
 ]])
 write(root .. "/main.c", "int main(void){return 0;}\n")
 write(root .. "/greet.c", "int greet(void){return 0;}\n")
@@ -59,7 +61,15 @@ check("configuration is native", hello ~= nil and hello.type == "native", hello 
 check("configuration targets the target name", hello ~= nil and hello.target == "hello", hello and hello.target)
 check("cwd is the build dir", hello ~= nil and hello.cwd == cmake.binary_dir(), hello and hello.cwd)
 
-check("library target creates no configuration", state.configuration("greet") == nil)
+local static = state.configuration("greet")
+check("static library creates a run configuration", static ~= nil)
+check("static runtime recorded", static ~= nil and static.runtime == "static", static and static.runtime)
+check("static has no executable", static ~= nil and static.target == nil, static and tostring(static.target))
+
+local shared = state.configuration("shared")
+check("shared library creates a run configuration", shared ~= nil)
+check("shared runtime recorded", shared ~= nil and shared.runtime == "shared", shared and shared.runtime)
+check("shared has no executable", shared ~= nil and shared.target == nil, shared and tostring(shared.target))
 
 local count = #state.run_configurations().configurations
 runner.load_cmake()
