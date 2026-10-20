@@ -5,6 +5,7 @@
 -- integrates with nvim-dap via the debug overlay.
 
 local cmake = require("orchlaunch.cmake")
+local integrations = require("orchlaunch.integrations")
 local process = require("orchlaunch.process")
 local state = require("orchlaunch.state")
 
@@ -59,6 +60,12 @@ end
 local function run_cmake_spec(label, spec)
     spec.timeout = spec.timeout or DEFAULT_TIMEOUT_MS
     local result = process.run(spec)
+
+    -- Compiler diagnostics go to the standard quickfix list; trouble.nvim,
+    -- snacks.nvim and `:copen` render it without any OrchLaunch-specific UI.
+    local output = (result.stdout or "") .. "\n" .. (result.stderr or "")
+    local qf_cwd = label == "configure" and spec.cwd or cmake.binary_dir()
+    integrations.quickfix(("OrchLaunch: CMake %s"):format(label), output, qf_cwd)
 
     if result.code ~= 0 then
         local detail = (result.stderr or ""):gsub("%s+$", "")

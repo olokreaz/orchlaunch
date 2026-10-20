@@ -244,9 +244,16 @@ configuration with `adapter = "lldb"` or `"gdb"`; `native` configurations launch
 and `remote-debug` configurations attach (`connection = "host:port"`, e.g. after
 `lldb-server gdbserver :1234 -- ./prog`).
 
-The debugger panel (`:OrchLaunchDebugger`) shows threads, frames, scopes and
-variables with Continue/Pause/Step Over/In/Out/Restart/Stop/Toggle BP controls
-and re-renders on session events. Breakpoints support conditions and log points
+`:OrchLaunchDebugger` delegates to **nvim-dap-view** (or nvim-dap-ui) when it is
+installed, which adds watches, REPL/console, exceptions and expandable scopes.
+Without those plugins the built-in fibrous panel is used: threads, frames,
+scopes and variables with Continue/Pause/Step Over/In/Out/Restart/Stop/Toggle BP
+controls, re-rendered on session events.
+
+CMake configure/build/install output is parsed into the standard **quickfix**
+list (`OrchLaunch: CMake <step>`), so existing quickfix UIs — trouble.nvim,
+snacks.nvim, `:copen` — show compiler diagnostics without OrchLaunch-specific
+code. Breakpoints support conditions and log points
 and persist per project in `.orch/breakpoints.json`:
 
 - `:OrchLaunchToggleBreakpoint` — toggle at the cursor;
@@ -276,7 +283,7 @@ Known limits: attaching to an existing PID may be blocked by
 | `:OrchLaunchLoadCMake` | Configure the project and load its CMake targets |
 | `:OrchLaunchCreateProject [dir]` | Create a `.orch` project |
 | `:OrchLaunchReload` | Reload all `.orch` files |
-| `:OrchLaunchDebugger` | Open the debugger panel |
+| `:OrchLaunchDebugger` | Open the debugger UI (dap-view/dap-ui, fibrous fallback) |
 | `:OrchLaunchToggleBreakpoint` | Toggle a breakpoint at the cursor |
 | `:OrchLaunchBreakpoint <expr>` | Set a conditional breakpoint at the cursor |
 | `:OrchLaunchLogBreakpoint <msg>` | Set a log point at the cursor |
@@ -402,7 +409,7 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - `:OrchLaunchCMakeProject` — set CMake project directory (cmake.source_dir)
 - `:OrchLaunchImportCMakePresets` — import CMake presets as disabled profiles
 - `:OrchLaunchLoadCMake` — configure and load CMake targets
-- `:OrchLaunchDebugger` — open the debugger panel
+- `:OrchLaunchDebugger` — open the debugger UI (dap-view/dap-ui when available)
 - `:OrchLaunchToggleBreakpoint` / `:OrchLaunchBreakpoint` / `:OrchLaunchLogBreakpoint` — breakpoints
 - `:OrchLaunchBreakpoints` / `:OrchLaunchClearBreakpoints` — manage breakpoints
 - `:OrchLaunchCheck` — check tools and integrations

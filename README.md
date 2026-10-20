@@ -40,6 +40,9 @@ target discovery — driven from JSON files inside a `.orch` project.
 - **CMake target discovery** — via the CMake File API (`codemodel-v2`), with
   automatic native run configurations for every target (executables, static and
   shared libraries).
+- **Build diagnostics** — compiler errors go to the standard **quickfix** list,
+  so trouble.nvim, snacks.nvim and `:copen` render them; no custom diagnostics
+  viewer.
 - **Run/Debug browser** — a [fibrous.nvim](https://github.com/mbrea-c/fibrous.nvim)-based UI
   for the list, details and every manager, backed by plain JSON on disk.
 - **Active configuration** — remembered per project (outside `.orch`).
@@ -52,9 +55,9 @@ OrchLaunch ships two backends — LLDB (`lldb-dap`/`lldb-vscode`) and GDB
 `"lldb"`). `native` configurations launch, `remote-debug` attaches (e.g. start
 `lldb-server gdbserver :1234 -- ./prog`, then set `connection = "host:port"`).
 
-- **Debugger panel** — `:OrchLaunchDebugger` opens a fibrous panel with threads,
-  frames, scopes, variables and stepping controls (Continue, Pause, Step
-  Over/In/Out, Restart, Stop, Toggle BP). It re-renders on every session event.
+- **Debugger UI** — `:OrchLaunchDebugger` opens **nvim-dap-view** (or
+  nvim-dap-ui) when installed; without them it falls back to the built-in
+  fibrous panel with threads, frames, scopes, variables and stepping controls.
 - **Breakpoints** — toggle with `:OrchLaunchToggleBreakpoint`, add a condition
   with `:OrchLaunchBreakpoint <expr>`, a log point with
   `:OrchLaunchLogBreakpoint <msg>`, and manage them all with
@@ -277,7 +280,7 @@ read-only.
 | `:OrchLaunchSelect [name]` | Set the active configuration |
 | `:OrchLaunchRun [name]` | Run a configuration (active when omitted) |
 | `:OrchLaunchDebug [name]` | Debug a configuration (active when omitted) |
-| `:OrchLaunchDebugger` | Open the fibrous debugger panel |
+| `:OrchLaunchDebugger` | Open the debugger UI (dap-view/dap-ui, fibrous fallback) |
 | `:OrchLaunchToggleBreakpoint` | Toggle a breakpoint at the cursor |
 | `:OrchLaunchBreakpoint <expr>` | Set a conditional breakpoint at the cursor |
 | `:OrchLaunchLogBreakpoint <msg>` | Set a log point at the cursor |

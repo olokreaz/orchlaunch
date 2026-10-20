@@ -215,8 +215,11 @@ function M.register()
     })
 
     vim.api.nvim_create_user_command("OrchLaunchDebugger", function()
-        require("orchlaunch.ui.fibrous.debugger").open()
-    end, { desc = "Toggle the debugger panel" })
+        local opened = require("orchlaunch.integrations").debugger_ui()
+        if not opened then
+            require("orchlaunch.ui.fibrous.debugger").open()
+        end
+    end, { desc = "Toggle the debugger UI" })
 
     --- @return boolean ok, integer? bufnr, integer? line
     local function cursor_breakpoint_target()

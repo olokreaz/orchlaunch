@@ -20,8 +20,11 @@ tagged yet; the entries below describe the current, unreleased state.
 - Native debugging through nvim-dap with two selectable backends: LLDB
   (`lldb-dap`/`lldb-vscode`) and GDB (`gdb --interpreter=dap`), including
   remote attach over `host:port`.
-- Debugger panel: threads, frames, scopes, variables and Continue / Pause /
-  Step Over / In / Out / Restart / Stop / Toggle BP controls.
+- Debugger UI: `:OrchLaunchDebugger` uses nvim-dap-view or nvim-dap-ui when
+  installed; the fibrous panel (threads, frames, scopes, variables, stepping)
+  remains as a fallback.
+- Build diagnostics are written to the standard quickfix list, ready for
+  trouble.nvim, snacks.nvim or `:copen`.
 - Breakpoints with conditions and log points, managed from a panel and
   persisted per project in `.orch/breakpoints.json`.
 - `:OrchLaunchCheck` environment preflight (CMake, compilers, debug adapters,
