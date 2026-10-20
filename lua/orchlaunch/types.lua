@@ -52,7 +52,7 @@
 ---@field name string
 ---@field type "native"
 ---@field target? string CMake target or executable path (nil for libraries).
----@field runtime? "executable"|"static"|"shared" CMake target kind.
+---@field runtime? string CMake target kind (`executable`, `static`, `shared`, `module`, ...).
 ---@field cwd? OrchPath
 ---@field args? string[]
 ---@field inherit_env? boolean

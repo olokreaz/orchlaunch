@@ -409,7 +409,7 @@ end
 ---@class OrchNativeOptions
 ---@field name string
 ---@field target? string
----@field runtime? "executable"|"static"|"shared"
+---@field runtime? string
 ---@field cwd? string
 ---@field args? string[]
 ---@field inherit_env? boolean

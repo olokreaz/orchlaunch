@@ -64,7 +64,7 @@ function M.open(existing, on_saved, opts)
                 comp = ui.col,
                 props = { grow = 1, gap = 1 },
                 children = {
-                    f.field_label("Runtime", f.select("runtime", { "executable", "static", "shared" })),
+                    f.field_label("Runtime", f.select("runtime", { "executable", "static", "shared", "module", "object", "interface", "utility", "unknown" })),
                     f.field_label("Console", f.select("console_mode", { "embedded", "hidden", "none" })),
                     f.check("keep_open", { label = "Keep console open" }),
                     f.check("clear_on_start", { label = "Clear console on start" }),

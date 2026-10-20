@@ -108,8 +108,9 @@ Then, in the browser:
 1. **Toolchains…** — add a toolchain (compiler/cmake/debugger).
 2. **CMake…** — create/select a CMake profile (or **Import** presets).
 3. **Load CMake (m)** — configure and discover CMake targets; native run
-   configurations are created for every target. Executables point at their
-   artifact; static/shared libraries keep the executable field empty.
+   configurations are created for every target and build before launch by
+   default. Executables point at their artifact; libraries and custom targets
+   keep the executable field empty.
 4. **New (a)** — add a configuration, pick a target, save with `<C-s>`.
 5. **Run (r)** — run the active/selected configuration.
 
@@ -234,10 +235,14 @@ reads back target names, types and artifact paths.
   missing toolchain) and automatically in a fresh session, so targets stay
   available without reconfiguring.
 - Loading targets **creates a native run configuration for every target** that
-  does not have one yet (name = target, cwd = build directory). Executables set
-  `target` to the target name; static/shared libraries leave it empty and record
-  `runtime = "static"|"shared"`. Existing configurations (including hand-made
-  ones) are never touched and their runtime is preserved.
+  does not have one yet (name = target, cwd = build directory), including
+  static/shared/module/object libraries and custom targets. Executables set
+  `target` to the target name; every other kind leaves it empty and records
+  `runtime` (`static`, `shared`, `module`, `object`, `utility`, ...). Each
+  configuration gets a **Build before launch** action by default, like CLion.
+  Running a configuration without an executable just performs its build steps.
+  Existing configurations (including hand-made ones) are never touched and
+  their runtime is preserved.
 
 ## UI
 

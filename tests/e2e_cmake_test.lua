@@ -28,6 +28,7 @@ add_executable(hello main.c)
 add_library(greet STATIC greet.c)
 add_library(util STATIC greet.c)
 add_library(shared SHARED greet.c)
+add_library(mod MODULE greet.c)
 add_test(NAME hello_runs COMMAND hello)
 install(TARGETS hello RUNTIME DESTINATION bin)
 install(TARGETS greet ARCHIVE DESTINATION lib)
@@ -148,10 +149,14 @@ h.check("shared discovered as SHARED_LIBRARY", (function()
     local target = cmake.target("shared")
     return target ~= nil and target.type == "SHARED_LIBRARY"
 end)())
+h.check("mod discovered as MODULE_LIBRARY", (function()
+    local target = cmake.target("mod")
+    return target ~= nil and target.type == "MODULE_LIBRARY"
+end)())
 h.check("targets sorted by name", (function()
     local list = cmake.targets()
     local names = vim.tbl_map(function(t) return t.name end, list)
-    return table.concat(names, ",") == "greet,hello,shared,util"
+    return table.concat(names, ",") == "greet,hello,mod,shared,util"
 end)(), vim.inspect(cmake.targets()))
 
 -- 6. real build --------------------------------------------------------------
@@ -214,24 +219,33 @@ h.eq("auto configuration is native", state.configuration("hello").type, "native"
 h.eq("executable runtime", state.configuration("hello").runtime, "executable")
 h.eq("auto configuration targets the target", state.configuration("hello").target, "hello")
 h.eq("auto configuration cwd is build dir", state.configuration("hello").cwd, cmake.binary_dir())
+h.eq("auto configuration builds before launch", state.configuration("hello").before.tools[1], "build")
 
 local static = state.configuration("util")
 h.check("static library got a run configuration", static ~= nil)
 h.eq("static runtime", static and static.runtime, "static")
 h.eq("static has no executable", static and static.target, nil)
+h.eq("static builds before launch", static and static.before.tools[1], "build")
 
 local shared = state.configuration("shared")
 h.check("shared library got a run configuration", shared ~= nil)
 h.eq("shared runtime", shared and shared.runtime, "shared")
 h.eq("shared has no executable", shared and shared.target, nil)
+h.eq("shared builds before launch", shared and shared.before.tools[1], "build")
+
+local module = state.configuration("mod")
+h.check("module library got a run configuration", module ~= nil)
+h.eq("module runtime", module and module.runtime, "module")
+h.eq("module has no executable", module and module.target, nil)
+h.eq("module builds before launch", module and module.before.tools[1], "build")
 
 local manual = state.configuration("greet")
 h.eq("manual runtime preserved", manual and manual.runtime, "shared")
 h.eq("manual executable preserved", manual and manual.target, "")
 
-h.eq("three configurations added", #state.run_configurations().configurations, before + 3)
+h.eq("four configurations added", #state.run_configurations().configurations, before + 4)
 runner.load_cmake()
-h.eq("reloading does not duplicate", #state.run_configurations().configurations, before + 3)
+h.eq("reloading does not duplicate", #state.run_configurations().configurations, before + 4)
 
 -- 11. persistence of the whole selection -------------------------------------
 state.reload()
@@ -241,6 +255,7 @@ h.eq("build preset persisted", state.cmake_settings().build_preset, "e2e-build")
 h.eq("test preset persisted", state.cmake_settings().test_preset, "e2e-test")
 h.check("auto configuration persisted", state.configuration("hello") ~= nil)
 h.eq("auto runtime persisted", state.configuration("shared") and state.configuration("shared").runtime, "shared")
+h.eq("auto before-launch persisted", state.configuration("mod") and state.configuration("mod").before.tools[1], "build")
 h.eq("manual runtime survives reload", state.configuration("greet") and state.configuration("greet").runtime, "shared")
 
 h.done("CMake end-to-end")

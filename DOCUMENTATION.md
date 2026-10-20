@@ -163,14 +163,17 @@ its name; running it resolves to the artifact path reported by CMake, falling
 back to a filesystem search in the build directory.
 
 Loading targets also creates a native run configuration for every CMake
-target that does not have one yet (executables, static and shared libraries).
-The configuration is named after the target, its working directory is the CMake
-build directory and its `runtime` records the target kind. Executables set
-`target` to the target name; static and shared libraries have no executable, so
-their `target` stays empty. Existing configurations are never touched — a
-configuration created by hand before the File API is parsed keeps its runtime
-and executable — and each new configuration is saved immediately, so this is
-safe to run repeatedly.
+target the File API reports — executables, static/shared/module/object
+libraries and custom targets. The configuration is named after the target, its
+working directory is the CMake build directory and its `runtime` records the
+target kind (`executable`, `static`, `shared`, `module`, `object`, `utility`,
+...). Executables set `target` to the target name; every other kind has no
+executable, so its `target` stays empty. All configurations get a `build`
+before-launch action by default (CLion style); running such a configuration
+executes its build steps and nothing else. Existing configurations are never
+touched — a configuration created by hand before the File API is parsed
+keeps its runtime and executable — and each new configuration is saved
+immediately, so this is safe to run repeatedly.
 
 ## Run configurations — `run_configurations.json`
 
@@ -194,7 +197,8 @@ One configuration is used for both Run and Debug. There is no separate
 ```
 
 Supported types: `native`, `remote-debug`, `compound`. For `native`, `runtime`
-is `executable`, `static` or `shared`; only executables have a `target`.
+records the CMake target kind (`executable`, `static`, `shared`, `module`,
+`object`, `utility`, ...); only executables have a `target`.
 
 ## External tools — `external_tools.json`
 

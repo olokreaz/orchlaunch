@@ -11,10 +11,12 @@ tagged yet; the entries below describe the current, unreleased state.
   external tools and before-launch steps (build / install / external).
 - CMake integration: `CMakePresets.json` import and resolution, profiles,
   CMake File API target discovery and automatic run configurations for every
-  target. Executables set `target`; static/shared libraries have an empty
-  executable and record `runtime = "static"|"shared"` instead. Configurations
-  created by hand before discovery are preserved, and new ones are saved
-  immediately.
+  target (executables, static/shared/module/object libraries, custom targets).
+  Executables set `target`; other kinds have an empty executable and record
+  their `runtime` instead, and all configurations build before launch by
+  default (CLion style); non-executable configurations run only those build
+  steps. Configurations created by hand before discovery are
+  preserved, and new ones are saved immediately.
 - Native debugging through nvim-dap with two selectable backends: LLDB
   (`lldb-dap`/`lldb-vscode`) and GDB (`gdb --interpreter=dap`), including
   remote attach over `host:port`.
