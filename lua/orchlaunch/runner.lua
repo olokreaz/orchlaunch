@@ -101,6 +101,79 @@ local function run_cmake_step(step, target)
     return true
 end
 
+--- Runs only the CMake configure step.
+---@return boolean
+function M.configure()
+    local ok = run_cmake_spec("configure", cmake.configure_spec())
+    if ok then
+        notify("CMake configure finished")
+    end
+    return ok
+end
+
+--- Builds the project (optionally a single target) and reports diagnostics in
+--- the quickfix list.
+---@param target? string
+---@return boolean
+function M.build(target)
+    local ok = run_cmake_step("build", target)
+    if ok then
+        notify(target and ("build finished: " .. target) or "build finished")
+    end
+    return ok
+end
+
+--- Removes build outputs through the build tool's `clean` target.
+---@return boolean
+function M.clean()
+    if not run_cmake_spec("clean", cmake.build_spec("clean")) then
+        return false
+    end
+    notify("clean finished")
+    return true
+end
+
+--- Clean + full configure/build (CLion's Rebuild).
+---@param target? string
+---@return boolean
+function M.rebuild(target)
+    if not M.clean() then
+        return false
+    end
+    local ok = run_cmake_step("build", target)
+    if ok then
+        notify(target and ("rebuild finished: " .. target) or "rebuild finished")
+    end
+    return ok
+end
+
+--- Configure, build and install.
+---@param target? string
+---@return boolean
+function M.install(target)
+    local ok = run_cmake_step("install", target)
+    if ok then
+        notify("install finished")
+    end
+    return ok
+end
+
+--- Configure, build and run the project's CTest suite.
+---@return boolean
+function M.test()
+    if not run_cmake_spec("configure", cmake.configure_spec()) then
+        return false
+    end
+    if not run_cmake_spec("build", cmake.build_spec()) then
+        return false
+    end
+    if not run_cmake_spec("test", cmake.test_spec()) then
+        return false
+    end
+    notify("tests finished")
+    return true
+end
+
 --- Saves the project so `cmake_settings.json` reflects the current selection.
 local function ensure_settings_saved()
     pcall(state.save)
@@ -174,6 +247,28 @@ end
 -- Configuration dispatch
 -- ============================================================================
 
+--- Toolchain environment first, then the configuration's own environment.
+---@param cfg OrchNativeConfiguration
+---@return OrchEnvironment
+function M.launch_environment(cfg)
+    local env = cmake.toolchain_environment()
+    for key, value in pairs(state.resolve_environment(cfg.environment)) do
+        env[key] = value
+    end
+    return env
+end
+
+--- Uses the toolchain debugger unless the configuration selects one.
+---@param cfg OrchNativeConfiguration
+---@return string?
+function M.launch_adapter(cfg)
+    if cfg.adapter and cfg.adapter ~= "" then
+        return cfg.adapter
+    end
+    local toolchain = cmake.toolchain()
+    return toolchain and toolchain.debugger ~= "" and toolchain.debugger or nil
+end
+
 --- @param name string
 --- @param mode "run" | "debug"
 local function launch_native(name, mode)
@@ -203,10 +298,11 @@ local function launch_native(name, mode)
         end
         dbg.start(cfg, {
             type = "launch",
+            adapter = M.launch_adapter(cfg),
             program = program,
             args = state.resolve_list(cfg.args),
             cwd = state.resolve_path(cfg.cwd) or state.root(),
-            env = state.resolve_environment(cfg.environment),
+            env = M.launch_environment(cfg),
         })
         return
     end
@@ -240,7 +336,7 @@ local function launch_native(name, mode)
         program = program,
         args = state.resolve_list(cfg.args),
         cwd = state.resolve_path(cfg.cwd) or state.root(),
-        env = state.resolve_environment(cfg.environment),
+        env = M.launch_environment(cfg),
         inherit_env = cfg.inherit_env ~= false,
         sudo = cfg.sudo == true,
     }
@@ -340,19 +436,6 @@ function M.run_active(opts)
     return name
 end
 
---- Maps any CMake File API target type to a runtime kind:
---- `EXECUTABLE` → `executable`, `STATIC_LIBRARY` → `static`, `MODULE_LIBRARY` →
---- `module`, `UTILITY` → `utility`, and so on.
----@param target_type? string
----@return string
-local function target_runtime(target_type)
-    if target_type == "EXECUTABLE" then
-        return "executable"
-    end
-    local runtime = (target_type or ""):lower():gsub("_library$", "")
-    return runtime ~= "" and runtime or "unknown"
-end
-
 --- Creates a native run configuration for *every* CMake target that does not
 --- have one yet, whatever its type (executables, static/shared/module/object/
 --- interface libraries, custom targets). Executables carry the target name in
@@ -369,13 +452,13 @@ local function sync_target_configurations(targets)
 
     for _, target in ipairs(targets) do
         if not state.configuration(target.name) then
-            local runtime = target_runtime(target.type)
+            local runtime = cmake.runtime_for(target.type)
             state.add_configuration(config.native({
                 name = target.name,
                 target = runtime == "executable" and target.name or nil,
                 runtime = runtime,
                 cwd = build_dir,
-                before = config.before({ config.build() }),
+                before = config.before({ config.build(target.name) }),
             }))
             -- Persist immediately: the configuration exists from this moment on.
             state.save()

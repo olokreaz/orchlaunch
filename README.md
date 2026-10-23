@@ -30,16 +30,21 @@ target discovery — driven from JSON files inside a `.orch` project.
 - **Native run** — embedded/external console, program arguments, environment,
   working directory, `sudo`, and before-launch steps (build / install /
   external tools).
-- **Toolchains** — C/C++/CMake/debugger paths, referenced by name so
-  configurations never duplicate compiler paths.
+- **Toolchains** — C/C++/CMake/debugger paths and environment, referenced by
+  name so configurations never duplicate compiler paths. The toolchain debugger
+  is the default for native configurations.
 - **CMake profiles** — several named ways to configure/build a project
-  (toolchain, generator, presets, directories, args, env); exactly one active.
+  (toolchain, generator, configure/build/test presets, directories, args, env);
+  exactly one active.
+- **CMake actions and targets** — configure, build a single target, rebuild,
+  clean, install and run CTest from commands; browse every discovered target
+  with build/run/debug/edit actions.
 - **CMake presets** — reads `CMakePresets.json` / `CMakeUserPresets.json`,
   resolves `inherits` and `include`, expands macros, and can import presets as
   disabled profiles.
 - **CMake target discovery** — via the CMake File API (`codemodel-v2`), with
-  automatic native run configurations for every target (executables, static and
-  shared libraries).
+  automatic native run configurations for every target (executables,
+  static/shared/module/object libraries and custom targets).
 - **Build diagnostics** — compiler errors go to the standard **quickfix** list,
   so trouble.nvim, snacks.nvim and `:copen` render them; no custom diagnostics
   viewer.
@@ -141,14 +146,18 @@ committed:
       "cmake": "cmake",
       "c": "clang",
       "cxx": "clang++",
-      "debugger": "lldb"
+      "debugger": "lldb",
+      "environment": { "CCACHE_DIR": "${workspace}/.ccache" }
     }
   ]
 }
 ```
 
 Paths may be command names (resolved from `PATH`), absolute paths, or paths
-relative to `.orch`.
+relative to `.orch`. A toolchain `environment` is inherited by CMake
+configure/build/test/install and by run/debug; the active profile or run
+configuration wins on key collisions. `debugger` is the default adapter for
+native configurations.
 
 ### CMake profiles — `cmake_settings.json`
 
@@ -163,6 +172,7 @@ relative to `.orch`.
         "toolchain": "Clang",
         "configure_preset": "debug",
         "build_preset": "debug-build",
+        "test_preset": "tests",
         "build_type": "Debug"
       },
       {
@@ -181,6 +191,8 @@ Exactly one profile is active; Run/Debug, before-launch build/install steps and
 target loading all use it. When a `*_preset` is set the corresponding manual
 fields are ignored (`cmake --preset`, `cmake --build --preset`, `ctest
 --preset`). A legacy flat `[cmake]` table is read as a single `Default` profile.
+The **Test preset** field is available for manual profiles and drives
+`:OrchLaunchTest`.
 
 `source_dir` names the CMake project (the directory holding `CMakeLists.txt`
 and `CMakePresets.json`), resolved like any path. The configure `-S`,
@@ -242,10 +254,13 @@ reads back target names, types and artifact paths.
   static/shared/module/object libraries and custom targets. Executables set
   `target` to the target name; every other kind leaves it empty and records
   `runtime` (`static`, `shared`, `module`, `object`, `utility`, ...). Each
-  configuration gets a **Build before launch** action by default, like CLion.
-  Running a configuration without an executable just performs its build steps.
-  Existing configurations (including hand-made ones) are never touched and
-  their runtime is preserved.
+  configuration gets a **Build before launch** action for its own target by
+  default, like CLion. Running a configuration without an executable just
+  performs its build steps. Existing configurations (including hand-made ones)
+  are never touched and their runtime is preserved.
+- `:OrchLaunchTargets` (or `t` in the browser) opens the **CMake Targets**
+  browser with artifact details and `b`/`r`/`d`/`e` actions for build, run,
+  debug and edit-config.
 
 ## UI
 
@@ -262,6 +277,7 @@ reads back target names, types and artifact paths.
 | `D` | Delete |
 | `A` | Set as active |
 | `m` | Load the CMake project (configure + discover targets) |
+| `t` | Browse CMake targets |
 | `Esc` | Close |
 
 The CMake profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`),
@@ -294,6 +310,13 @@ read-only.
 | `:OrchLaunchCMakeProject` | Set the CMake project directory |
 | `:OrchLaunchImportCMakePresets` | Import CMake presets as disabled profiles |
 | `:OrchLaunchLoadCMake` | Configure the project and load its CMake targets |
+| `:OrchLaunchTargets` | Browse CMake targets |
+| `:OrchLaunchConfigure` | Configure with the active CMake profile |
+| `:OrchLaunchBuild [target]` | Build the project or a single target |
+| `:OrchLaunchRebuild [target]` | Clean and rebuild |
+| `:OrchLaunchClean` | Clean build outputs |
+| `:OrchLaunchInstall [target]` | Configure, build and install |
+| `:OrchLaunchTest` | Build and run the CTest suite |
 | `:OrchLaunchCreateProject [dir]` | Create a `.orch` project |
 | `:OrchLaunchReload` | Reload all `.orch` files |
 | `:OrchLaunchCheck` | Check tools and integrations |

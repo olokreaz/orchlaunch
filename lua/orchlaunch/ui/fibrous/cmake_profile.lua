@@ -34,7 +34,6 @@ local PRESERVED_KEYS = {
     "kind",
     "configure_preset",
     "build_preset",
-    "test_preset",
     "package_preset",
     "workflow_preset",
 }
@@ -125,6 +124,7 @@ local MANUAL_FIELDS = {
     { id = "configure_args", kind = "lines", height = 4 },
     { id = "build_args", kind = "lines", height = 4 },
     { id = "install_args", kind = "lines", height = 4 },
+    { id = "test_preset", kind = "select" },
     { id = "definitions", kind = "env", height = 4 },
     { id = "environment", kind = "env", height = 4 },
 }
@@ -158,6 +158,7 @@ function M.open(existing, on_saved, opts)
         configure_args = UI.format_lines(existing.configure_args),
         build_args = UI.format_lines(existing.build_args),
         install_args = UI.format_lines(existing.install_args),
+        test_preset = existing.test_preset or "(none)",
         definitions = UI.format_env(existing.definitions),
         environment = UI.format_env(existing.environment),
     }
@@ -166,6 +167,16 @@ function M.open(existing, on_saved, opts)
     for _, toolchain in ipairs(state.toolchains()) do
         toolchain_options[#toolchain_options + 1] = toolchain.name
     end
+
+    local test_options = { "(none)" }
+    local discovered = state.presets()
+    if discovered then
+        local presets = require("orchlaunch.presets")
+        for _, preset in ipairs(presets.visible(discovered, "test")) do
+            test_options[#test_options + 1] = preset.name
+        end
+    end
+    test_options = with_current(test_options, existing.test_preset)
 
     local fields_meta = {}
     if readonly then
@@ -218,6 +229,7 @@ function M.open(existing, on_saved, opts)
                     f.field_label("Build type", f.select("build_type", with_current(BUILD_TYPES, initial.build_type))),
                     f.field_label("Build dir", f.text("build_dir", { height = 3, singleline = true, grow = 1 })),
                     f.field_label("Install dir", f.text("install_dir", { height = 3, singleline = true, grow = 1 })),
+                    f.field_label("Test preset", f.select("test_preset", test_options)),
                 },
             }
 
@@ -273,6 +285,7 @@ function M.open(existing, on_saved, opts)
                 configure_args = UI.lines(values.configure_args),
                 build_args = UI.lines(values.build_args),
                 install_args = UI.lines(values.install_args),
+                test_preset = trimmed(values.test_preset ~= "(none)" and values.test_preset or nil),
                 definitions = UI.parse_env(values.definitions),
                 environment = UI.parse_env(values.environment),
             }

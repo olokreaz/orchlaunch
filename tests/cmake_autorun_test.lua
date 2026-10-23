@@ -64,7 +64,12 @@ check("executable target creates a run configuration", hello ~= nil)
 check("configuration is native", hello ~= nil and hello.type == "native", hello and hello.type)
 check("configuration targets the target name", hello ~= nil and hello.target == "hello", hello and hello.target)
 check("cwd is the build dir", hello ~= nil and hello.cwd == cmake.binary_dir(), hello and hello.cwd)
-check("executable builds before launch", hello ~= nil and hello.before.tools[1] == "build", hello and hello.before)
+local function builds(name, cfg)
+    local step = cfg and cfg.before and cfg.before.tools[1]
+    return type(step) == "table" and step.type == "build" and step.target == name
+end
+
+check("executable builds its own target", builds("hello", hello), hello and hello.before)
 
 local static = state.configuration("greet")
 check("static library creates a run configuration", static ~= nil)
@@ -86,7 +91,7 @@ for name, runtime in pairs(expected) do
     check(name .. " got a run configuration", cfg ~= nil)
     check(name .. " runtime recorded", cfg ~= nil and cfg.runtime == runtime, cfg and cfg.runtime)
     check(name .. " has no executable", cfg ~= nil and cfg.target == nil, cfg and tostring(cfg.target))
-    check(name .. " builds before launch", cfg ~= nil and cfg.before.tools[1] == "build", cfg and cfg.before)
+    check(name .. " builds its own target", builds(name, cfg), cfg and cfg.before)
 end
 
 local count = #state.run_configurations().configurations

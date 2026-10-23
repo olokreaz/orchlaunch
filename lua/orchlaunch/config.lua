@@ -519,6 +519,7 @@ end
 ---@field c string
 ---@field cxx string
 ---@field debugger string
+---@field environment? OrchEnvironment
 
 ---@param opts OrchToolchainOptions
 ---@return OrchToolchain
@@ -537,6 +538,7 @@ function M.toolchain(opts)
         c = opts.c,
         cxx = opts.cxx,
         debugger = opts.debugger,
+        environment = opts.environment,
     }
 end
 

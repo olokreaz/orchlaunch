@@ -15,7 +15,7 @@ function M.open(existing, on_saved, opts)
     local targets = require("orchlaunch.cmake").targets()
     existing = existing or {}
 
-    local build, install, external = form.before_flags(existing.before)
+    local build, install, external, build_target = form.before_flags(existing.before)
     local matched = targets and vim.tbl_contains(vim.tbl_map(function(t)
         return t.name
     end, targets), existing.symbol)
@@ -23,7 +23,7 @@ function M.open(existing, on_saved, opts)
     return form.open({
         augroup = "OrchlaunchFibrousRemote",
         title = "  Remote debug configuration",
-        size = { width = 90, height = 26 },
+        size = { width = 90, height = 30 },
         on_saved = on_saved,
         initial = {
             name = existing.name or "",
@@ -32,6 +32,7 @@ function M.open(existing, on_saved, opts)
             connection = existing.connection or "",
             adapter = existing.adapter or "",
             before_build = build,
+            before_build_target = build_target or "",
             before_install = install,
             before_external = external,
         },

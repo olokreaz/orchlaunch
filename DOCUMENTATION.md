@@ -23,7 +23,8 @@ the API every other module uses. No other module parses JSON directly.
       "cmake": "cmake",
       "c": "clang",
       "cxx": "clang++",
-      "debugger": "lldb"
+      "debugger": "lldb",
+      "environment": { "CCACHE_DIR": "${workspace}/.ccache" }
     }
   ]
 }
@@ -31,6 +32,10 @@ the API every other module uses. No other module parses JSON directly.
 
 Tool paths may be command names (resolved from `PATH`), absolute paths, or
 paths relative to `.orch`. `gdb` and `lldb` are recognized as debuggers.
+`environment` is inherited by CMake configure/build/test/install and by
+run/debug; the active profile or run configuration overrides it on key
+collisions. The toolchain `debugger` is the default for native configurations;
+a configuration can still select its own adapter where one is supported.
 
 ## CMake profiles — `cmake_settings.json`
 
@@ -115,8 +120,8 @@ booleans, `<C-s>` to save and `q`/`<Esc>` to close. Sections (Profile, Build,
 Toolchain, Arguments, Variables) are laid out in two columns.
 
 Manual profiles expose every field — name, enabled, toolchain, generator, build
-type, directories, args, definitions and environment — and never reference
-presets. A new profile is pre-filled with `generator = "Ninja"` and
+type, directories, **test preset**, args, definitions and environment — and
+never reference configure/build presets. A new profile is pre-filled with `generator = "Ninja"` and
 `build_type = "Debug"`; the generator select lists the common CMake generators
 (and keeps a custom value if one was set).
 
@@ -168,12 +173,36 @@ libraries and custom targets. The configuration is named after the target, its
 working directory is the CMake build directory and its `runtime` records the
 target kind (`executable`, `static`, `shared`, `module`, `object`, `utility`,
 ...). Executables set `target` to the target name; every other kind has no
-executable, so its `target` stays empty. All configurations get a `build`
-before-launch action by default (CLion style); running such a configuration
-executes its build steps and nothing else. Existing configurations are never
+executable, so its `target` stays empty. All configurations get a build step
+for **their own target** before launch by default (CLion style); running such a
+configuration executes its build steps and nothing else. Existing configurations are never
 touched — a configuration created by hand before the File API is parsed
 keeps its runtime and executable — and each new configuration is saved
 immediately, so this is safe to run repeatedly.
+
+### Building and running targets
+
+`:OrchLaunchTargets` (or `t` in the run browser) opens the **CMake Targets**
+browser. It shows each target's type and artifact, and provides:
+
+| Key | Action |
+| --- | --- |
+| `b` | Build this target |
+| `r` | Run it (creates its native configuration on demand) |
+| `d` | Debug it |
+| `e` | Edit/create its native configuration |
+
+The corresponding project-wide commands use the active profile:
+
+- `:OrchLaunchConfigure` — configure only;
+- `:OrchLaunchBuild [target]` — build everything or one target;
+- `:OrchLaunchRebuild [target]` — clean, then build;
+- `:OrchLaunchClean` — run the build tool's `clean`;
+- `:OrchLaunchInstall [target]` — configure/build/install;
+- `:OrchLaunchTest` — configure, build and run CTest (uses `test_preset` when
+  set, otherwise manual test arguments).
+
+CMake output is parsed into the standard quickfix list for every action.
 
 ## Run configurations — `run_configurations.json`
 
@@ -281,6 +310,13 @@ Known limits: attaching to an existing PID may be blocked by
 | `:OrchLaunchCMakeProject` | Set the CMake project directory (`cmake.source_dir`) |
 | `:OrchLaunchImportCMakePresets` | Import CMake presets as disabled profiles |
 | `:OrchLaunchLoadCMake` | Configure the project and load its CMake targets |
+| `:OrchLaunchTargets` | Browse CMake targets |
+| `:OrchLaunchConfigure` | Configure with the active CMake profile |
+| `:OrchLaunchBuild [target]` | Build the project or a single target |
+| `:OrchLaunchRebuild [target]` | Clean and rebuild |
+| `:OrchLaunchClean` | Clean build outputs |
+| `:OrchLaunchInstall [target]` | Configure, build and install |
+| `:OrchLaunchTest` | Build and run the CTest suite |
 | `:OrchLaunchCreateProject [dir]` | Create a `.orch` project |
 | `:OrchLaunchReload` | Reload all `.orch` files |
 | `:OrchLaunchDebugger` | Open the debugger UI (dap-view/dap-ui, fibrous fallback) |
@@ -389,7 +425,8 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 
 ### UI (fibrous)
 - The whole UI is built on [`fibrous.nvim`](https://github.com/mbrea-c/fibrous.nvim). `ui/fibrous/form.lua` provides the shared form scaffolding (state, `<C-s>` save, close, `.orch` test hooks) and `ui/fibrous/fields.lua` the continuous keyboard navigation: `Tab`/`Shift+Tab` step between fields, `s` jumps by letter, `<CR>` enters a field, `<Esc>` leaves a single-line field.
-- Browser (`ui/fibrous/browser.lua`): configurations with an active marker, details pane, actions (`r` run, `d` debug, `e` edit, `a` new, `y` duplicate, `D` delete, `A` set active, `m` load CMake, `q`/`<Esc>` close) and hints for the CMake/toolchain managers.
+- Browser (`ui/fibrous/browser.lua`): configurations with an active marker, details pane, actions (`r` run, `d` debug, `e` edit, `a` new, `y` duplicate, `D` delete, `A` set active, `m` load CMake, `t` targets, `q`/`<Esc>` close) and hints for the CMake/toolchain managers.
+- CMake Targets browser (`ui/fibrous/targets.lua`): every discovered target with artifact details and build/run/debug/edit-config actions.
 - Editors per type: native/remote/compound/toolchain/external tool/CMake project, all using the same form scaffolding.
 - CMake profile editor (`ui/fibrous/cmake_profile.lua`): manual profiles are fully editable; preset-derived profiles are read-only (imported from the preset JSON files and never created by hand). It keeps a `.orch` scripting facade (`fields`, `values`, `set`, `save`, `close`) for the tests.
 - List dialogs (`ui/fibrous/list.lua` plus the specs in `ui/dialogs/`): generic list with a details pane and actions (New/Edit/Delete/Toggle/Set Active/Import/Project; `a,e,D,t,A,i,p`).
@@ -409,6 +446,9 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 - `:OrchLaunchCMakeProject` — set CMake project directory (cmake.source_dir)
 - `:OrchLaunchImportCMakePresets` — import CMake presets as disabled profiles
 - `:OrchLaunchLoadCMake` — configure and load CMake targets
+- `:OrchLaunchTargets` — browse CMake targets
+- `:OrchLaunchConfigure` / `:OrchLaunchBuild [target]` / `:OrchLaunchRebuild [target]` — configure and build
+- `:OrchLaunchClean` / `:OrchLaunchInstall [target]` / `:OrchLaunchTest` — clean, install and CTest
 - `:OrchLaunchDebugger` — open the debugger UI (dap-view/dap-ui when available)
 - `:OrchLaunchToggleBreakpoint` / `:OrchLaunchBreakpoint` / `:OrchLaunchLogBreakpoint` — breakpoints
 - `:OrchLaunchBreakpoints` / `:OrchLaunchClearBreakpoints` — manage breakpoints

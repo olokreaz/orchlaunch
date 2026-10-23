@@ -23,6 +23,8 @@ local function format_before(before)
         local kind = type(item) == "table" and item.type or item
         if kind == "external" then
             parts[#parts + 1] = (type(item) == "table" and item.tool) or "?"
+        elseif kind == "build" and type(item) == "table" and item.target then
+            parts[#parts + 1] = "build " .. item.target
         else
             parts[#parts + 1] = kind
         end
@@ -43,6 +45,10 @@ local function format_details(active, cfg)
     if cfg.type == "native" then
         lines[#lines + 1] = ("Runtime:  %s"):format(cfg.runtime or "executable")
         lines[#lines + 1] = ("Target:  %s"):format(cfg.target or "—")
+        local known = cfg.target and cfg.target ~= "" and require("orchlaunch.cmake").target(cfg.target) or nil
+        if known and known.artifact then
+            lines[#lines + 1] = ("Artifact:  %s"):format(known.artifact)
+        end
         lines[#lines + 1] = ("Working dir:  %s"):format(cfg.cwd or "${workspace}")
         lines[#lines + 1] = ("Arguments:  %s"):format(#(cfg.args or {}) > 0 and table.concat(cfg.args, " ") or "—")
         local env_count = #vim.tbl_keys(cfg.environment or {})
@@ -219,8 +225,11 @@ function M.open()
             end },
             { lhs = "y", handler = duplicate },
             { lhs = "m", handler = load_cmake },
+            { lhs = "t", handler = function()
+                require("orchlaunch.ui.fibrous.targets").open()
+            end },
         },
-        extra_hints = { "r  Run", "d  Debug", "y  Duplicate", "m  Load CMake" },
+        extra_hints = { "r  Run", "d  Debug", "y  Duplicate", "m  Load CMake", "t  Targets" },
         open = function(existing, on_saved)
             if existing == nil then
                 return choose_type(on_saved)

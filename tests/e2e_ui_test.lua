@@ -49,8 +49,8 @@ local function arm_targets()
     state.set_runtime("cmake_source_dir", cmake.source_dir())
     state.set_runtime("cmake_binary_dir", cmake.binary_dir())
     state.set_runtime("cmake_targets", {
-        { name = "hello", type = "EXECUTABLE" },
-        { name = "greet", type = "STATIC_LIBRARY" },
+        { name = "hello", type = "EXECUTABLE", artifact = "build/hello" },
+        { name = "greet", type = "STATIC_LIBRARY", artifact = "build/libgreet.a" },
     })
 end
 
@@ -118,6 +118,7 @@ r.orch.set("console_mode", "hidden")
 r.orch.set("keep_open", false)
 r.orch.set("clear_on_start", false)
 r.orch.set("before_build", true)
+r.orch.set("before_build_target", "hello")
 r.orch.set("before_external", "gen")
 vim.wait(50)
 r.orch.save()
@@ -136,7 +137,10 @@ h.eq("native environment parsed", native and native.environment, { A = "1", B = 
 h.eq("native console mode persisted", native and native.console.mode, "hidden")
 h.eq("native keep_open persisted", native and native.console.keep_open, false)
 h.eq("native clear_on_start persisted", native and native.console.clear_on_start, false)
-h.eq("native before build flag", native and native.before.tools[1], "build")
+h.eq("native before build target", (function()
+    local step = native and native.before and native.before.tools[1]
+    return type(step) == "table" and step.type .. ":" .. step.target
+end)(), "build:hello")
 h.eq("native before external tool", native and native.before.tools[2].tool, "gen")
 
 -- duplicate name is rejected and the editor stays open
@@ -206,6 +210,7 @@ rt.orch.set("cmake", "cmake")
 rt.orch.set("c", "clang")
 rt.orch.set("cxx", "clang++")
 rt.orch.set("debugger", "lldb")
+rt.orch.set("environment", "ORCH_TOOLCHAIN_ENV=yes")
 rt.orch.save()
 vim.wait(100)
 h.check("toolchain editor on_saved fired", saved_tc)
@@ -215,6 +220,7 @@ local tc = state.toolchain("Clang")
 h.check("toolchain persisted", tc ~= nil)
 h.eq("toolchain cxx", tc and tc.cxx, "clang++")
 h.eq("toolchain type", tc and tc.type, "system")
+h.eq("toolchain environment", tc and tc.environment, { ORCH_TOOLCHAIN_ENV = "yes" })
 
 -- ============================================================================
 -- 6. external tool editor
@@ -287,6 +293,36 @@ h.eq("focus returns to the toolchains list", vim.api.nvim_get_current_win(), lis
 h.check("toolchains list survives editor close", vim.api.nvim_win_is_valid(list_win))
 tl.unmount()
 vim.wait(50)
+
+-- ============================================================================
+-- 9c. CMake targets browser
+-- ============================================================================
+local targets = require("orchlaunch.ui.fibrous.targets").open()
+vim.wait(200)
+local targets_text = screen(targets)
+h.contains("targets dialog title", targets_text, "CMake Targets")
+h.contains("targets dialog lists executable", targets_text, "hello")
+h.contains("targets dialog lists library", targets_text, "greet")
+h.contains("targets dialog build hint", targets_text, "Build")
+h.contains("targets dialog run hint", targets_text, "Run")
+h.contains("targets dialog debug hint", targets_text, "Debug")
+h.contains("targets dialog config hint", targets_text, "Edit config")
+h.contains("targets dialog shows artifact", targets_text, "build/hello")
+
+local targets_win = targets.winid
+vim.api.nvim_feedkeys("e", "x", false)
+vim.wait(150)
+local target_cfg = state.configuration("hello")
+h.check("target edit creates its configuration", target_cfg ~= nil)
+h.eq("target configuration builds its target", (function()
+    local step = target_cfg and target_cfg.before and target_cfg.before.tools[1]
+    return type(step) == "table" and step.target
+end)(), "hello")
+h.check("target edit opens the native editor", vim.api.nvim_get_current_win() ~= targets_win)
+vim.api.nvim_feedkeys("q", "x", false)
+vim.wait(100)
+h.eq("focus returns to targets", vim.api.nvim_get_current_win(), targets_win)
+targets.unmount()
 
 -- ============================================================================
 -- 10. shared UI helpers

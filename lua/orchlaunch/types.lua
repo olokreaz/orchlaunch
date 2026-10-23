@@ -121,6 +121,7 @@
 ---@field c OrchPath
 ---@field cxx OrchPath
 ---@field debugger string `gdb`/`lldb` or an executable path.
+---@field environment? OrchEnvironment Environment applied to configure/build/test and to launched programs.
 ---@field [string] any
 
 --- Contents of `toolchain.json`.

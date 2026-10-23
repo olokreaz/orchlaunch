@@ -16,7 +16,7 @@ function M.open(existing, on_saved, opts)
     existing = existing or {}
 
     local console = existing.console or {}
-    local build, install, external = form.before_flags(existing.before)
+    local build, install, external, build_target = form.before_flags(existing.before)
     local matched = targets and vim.tbl_contains(vim.tbl_map(function(t)
         return t.name
     end, targets), existing.target)
@@ -24,7 +24,7 @@ function M.open(existing, on_saved, opts)
     return form.open({
         augroup = "OrchlaunchFibrousNative",
         title = "  Native configuration",
-        size = { width = 108, height = 32 },
+        size = { width = 108, height = 34 },
         on_saved = on_saved,
         initial = {
             name = existing.name or "",
@@ -40,6 +40,7 @@ function M.open(existing, on_saved, opts)
             keep_open = console.keep_open ~= false,
             clear_on_start = console.clear_on_start ~= false,
             before_build = build,
+            before_build_target = build_target or "",
             before_install = install,
             before_external = external,
         },

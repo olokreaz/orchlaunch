@@ -13,9 +13,9 @@ tagged yet; the entries below describe the current, unreleased state.
   CMake File API target discovery and automatic run configurations for every
   target (executables, static/shared/module/object libraries, custom targets).
   Executables set `target`; other kinds have an empty executable and record
-  their `runtime` instead, and all configurations build before launch by
-  default (CLion style); non-executable configurations run only those build
-  steps. Configurations created by hand before discovery are
+  their `runtime` instead, and all configurations build their own target before
+  launch by default (CLion style); non-executable configurations run only those
+  build steps. Configurations created by hand before discovery are
   preserved, and new ones are saved immediately.
 - Native debugging through nvim-dap with two selectable backends: LLDB
   (`lldb-dap`/`lldb-vscode`) and GDB (`gdb --interpreter=dap`), including
@@ -25,6 +25,16 @@ tagged yet; the entries below describe the current, unreleased state.
   remains as a fallback.
 - Build diagnostics are written to the standard quickfix list, ready for
   trouble.nvim, snacks.nvim or `:copen`.
+- CMake actions: `:OrchLaunchConfigure`, `:OrchLaunchBuild [target]`,
+  `:OrchLaunchRebuild [target]`, `:OrchLaunchClean`, `:OrchLaunchInstall` and
+  `:OrchLaunchTest`.
+- CMake Targets browser (`:OrchLaunchTargets`, `t` in the run browser) with
+  artifact details and build/run/debug/edit-config actions.
+- Toolchain `environment` is merged into CMake configure/build/install/test and
+  run/debug environments; the toolchain `debugger` is the default adapter for
+  native configurations.
+- Manual CMake profiles expose a **Test preset** field driving
+  `:OrchLaunchTest`.
 - Breakpoints with conditions and log points, managed from a panel and
   persisted per project in `.orch/breakpoints.json`.
 - `:OrchLaunchCheck` environment preflight (CMake, compilers, debug adapters,

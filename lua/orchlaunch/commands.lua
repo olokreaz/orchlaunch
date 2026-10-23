@@ -30,6 +30,21 @@ local function configuration_names()
     return names
 end
 
+--- @return string[]
+local function target_names()
+    local state = require("orchlaunch.state")
+    if not state.is_loaded() then
+        return {}
+    end
+
+    local cmake = require("orchlaunch.cmake")
+    local names = {}
+    for _, target in ipairs(cmake.targets() or {}) do
+        names[#names + 1] = target.name
+    end
+    return names
+end
+
 --- Loads the `.orch` project containing the current directory when needed.
 --- @return table? state
 local function ensure_loaded()
@@ -339,6 +354,66 @@ function M.register()
         end
         require("orchlaunch.runner").refresh_cmake()
     end, { desc = "Discover CMake targets from an existing build directory (no configure)" })
+
+    vim.api.nvim_create_user_command("OrchLaunchConfigure", function()
+        if ensure_loaded() then
+            require("orchlaunch.runner").configure()
+        end
+    end, { desc = "Configure the project with the active CMake profile" })
+
+    vim.api.nvim_create_user_command("OrchLaunchBuild", function(args)
+        if ensure_loaded() then
+            require("orchlaunch.runner").build(args.args ~= "" and args.args or nil)
+        end
+    end, {
+        nargs = "?",
+        desc = "Build the project or a single target",
+        complete = function()
+            return target_names()
+        end,
+    })
+
+    vim.api.nvim_create_user_command("OrchLaunchRebuild", function(args)
+        if ensure_loaded() then
+            require("orchlaunch.runner").rebuild(args.args ~= "" and args.args or nil)
+        end
+    end, {
+        nargs = "?",
+        desc = "Clean and rebuild the project or a single target",
+        complete = function()
+            return target_names()
+        end,
+    })
+
+    vim.api.nvim_create_user_command("OrchLaunchClean", function()
+        if ensure_loaded() then
+            require("orchlaunch.runner").clean()
+        end
+    end, { desc = "Clean build outputs through the active build tool" })
+
+    vim.api.nvim_create_user_command("OrchLaunchInstall", function(args)
+        if ensure_loaded() then
+            require("orchlaunch.runner").install(args.args ~= "" and args.args or nil)
+        end
+    end, {
+        nargs = "?",
+        desc = "Configure, build and install the project",
+        complete = function()
+            return target_names()
+        end,
+    })
+
+    vim.api.nvim_create_user_command("OrchLaunchTest", function()
+        if ensure_loaded() then
+            require("orchlaunch.runner").test()
+        end
+    end, { desc = "Build and run the CTest suite" })
+
+    vim.api.nvim_create_user_command("OrchLaunchTargets", function()
+        if ensure_loaded() then
+            require("orchlaunch.ui.fibrous.targets").open()
+        end
+    end, { desc = "Browse CMake targets" })
 
     vim.api.nvim_create_user_command("OrchLaunchExternalTool", function(args)
         if not ensure_loaded() then

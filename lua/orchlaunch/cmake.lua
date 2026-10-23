@@ -145,10 +145,21 @@ local function spec_from(argv, cwd, env)
     }
 end
 
+--- Environment contributed by the active toolchain (resolved like any other
+--- environment block).
+---@return OrchEnvironment
+function M.toolchain_environment()
+    local toolchain = M.toolchain()
+    return state.resolve_environment(toolchain and toolchain.environment or {})
+end
+
 --- @param resolved table?
 --- @return OrchEnvironment
 local function preset_environment(resolved)
     local out = {}
+    for key, value in pairs(M.toolchain_environment()) do
+        out[key] = tostring(value)
+    end
     for key, value in pairs(settings().environment or {}) do
         out[key] = tostring(value)
     end
@@ -396,6 +407,19 @@ local function artifact_path(artifacts)
     end
 
     return vim.fs.normalize(path)
+end
+
+--- Maps a CMake File API target type to the runtime kind used by run
+--- configurations: `EXECUTABLE` → `executable`, `STATIC_LIBRARY` → `static`,
+--- `MODULE_LIBRARY` → `module`, `UTILITY` → `utility`, and so on.
+---@param target_type? string
+---@return string
+function M.runtime_for(target_type)
+    if target_type == "EXECUTABLE" then
+        return "executable"
+    end
+    local runtime = (target_type or ""):lower():gsub("_library$", "")
+    return runtime ~= "" and runtime or "unknown"
 end
 
 --- Locates the codemodel reference inside a File API index reply. Client

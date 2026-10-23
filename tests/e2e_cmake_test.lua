@@ -75,6 +75,7 @@ h.eq("project root", state.root(), vim.fs.normalize(root))
 
 state.add_toolchain(config.toolchain({
     name = "Gcc", type = "system", cmake = "cmake", c = "gcc", cxx = "g++", debugger = "gdb",
+    environment = { ORCH_TOOLCHAIN_ENV = "yes", ORCH_TOOLCHAIN_OVERRIDE = "toolchain" },
 }))
 
 -- 2. preset discovery --------------------------------------------------------
@@ -105,6 +106,7 @@ h.eq("imported build profile configurePreset", state.cmake_profile("e2e-build").
 state.add_cmake_profile(config.cmake_settings({
     name = "E2E", toolchain = "Gcc",
     configure_preset = "e2e-debug", build_preset = "e2e-build", test_preset = "e2e-test",
+    environment = { ORCH_PROFILE_ENV = "yes", ORCH_TOOLCHAIN_OVERRIDE = "profile" },
 }))
 state.set_active_cmake_profile("E2E")
 state.save()
@@ -118,9 +120,13 @@ h.eq("configure program", cspec.program, "cmake")
 h.eq("configure cwd", cspec.cwd, vim.fs.normalize(root))
 h.contains("configure uses --preset", table.concat(cspec.args, " "), "--preset e2e-debug")
 h.contains("configure injects C compiler", table.concat(cspec.args, " "), "CMAKE_C_COMPILER=gcc")
+h.eq("configure inherits toolchain env", cspec.env.ORCH_TOOLCHAIN_ENV, "yes")
+h.eq("configure inherits profile env", cspec.env.ORCH_PROFILE_ENV, "yes")
+h.eq("profile env wins over toolchain env", cspec.env.ORCH_TOOLCHAIN_OVERRIDE, "profile")
 
 local bspec = cmake.build_spec()
 h.contains("build uses --build --preset", table.concat(bspec.args, " "), "--build --preset e2e-build")
+h.eq("build inherits toolchain env", bspec.env.ORCH_TOOLCHAIN_ENV, "yes")
 
 local bspec_target = cmake.build_spec("hello")
 h.check("build forwards --target", (function()
@@ -132,6 +138,12 @@ end)())
 local targets = cmake.load_targets()
 h.check("real configure + discovery succeeds", targets ~= nil, "load_targets returned nil")
 h.check("targets are a table", type(targets) == "table")
+
+h.eq("runtime_for executable", cmake.runtime_for("EXECUTABLE"), "executable")
+h.eq("runtime_for static", cmake.runtime_for("STATIC_LIBRARY"), "static")
+h.eq("runtime_for shared", cmake.runtime_for("SHARED_LIBRARY"), "shared")
+h.eq("runtime_for utility", cmake.runtime_for("UTILITY"), "utility")
+h.eq("runtime_for unknown", cmake.runtime_for(nil), "unknown")
 
 h.check("hello discovered as EXECUTABLE", (function()
     local target = cmake.target("hello")
@@ -219,25 +231,37 @@ h.eq("auto configuration is native", state.configuration("hello").type, "native"
 h.eq("executable runtime", state.configuration("hello").runtime, "executable")
 h.eq("auto configuration targets the target", state.configuration("hello").target, "hello")
 h.eq("auto configuration cwd is build dir", state.configuration("hello").cwd, cmake.binary_dir())
-h.eq("auto configuration builds before launch", state.configuration("hello").before.tools[1], "build")
+h.check("auto configuration builds before launch", (function()
+    local step = state.configuration("hello").before.tools[1]
+    return type(step) == "table" and step.type == "build" and step.target == "hello"
+end)(), vim.inspect(state.configuration("hello").before))
 
 local static = state.configuration("util")
 h.check("static library got a run configuration", static ~= nil)
 h.eq("static runtime", static and static.runtime, "static")
 h.eq("static has no executable", static and static.target, nil)
-h.eq("static builds before launch", static and static.before.tools[1], "build")
+h.check("static builds before launch", (function()
+    local step = static and static.before and static.before.tools[1]
+    return type(step) == "table" and step.type == "build" and step.target == "util"
+end)(), static and vim.inspect(static.before))
 
 local shared = state.configuration("shared")
 h.check("shared library got a run configuration", shared ~= nil)
 h.eq("shared runtime", shared and shared.runtime, "shared")
 h.eq("shared has no executable", shared and shared.target, nil)
-h.eq("shared builds before launch", shared and shared.before.tools[1], "build")
+h.check("shared builds before launch", (function()
+    local step = shared and shared.before and shared.before.tools[1]
+    return type(step) == "table" and step.type == "build" and step.target == "shared"
+end)(), shared and vim.inspect(shared.before))
 
 local module = state.configuration("mod")
 h.check("module library got a run configuration", module ~= nil)
 h.eq("module runtime", module and module.runtime, "module")
 h.eq("module has no executable", module and module.target, nil)
-h.eq("module builds before launch", module and module.before.tools[1], "build")
+h.check("module builds before launch", (function()
+    local step = module and module.before and module.before.tools[1]
+    return type(step) == "table" and step.type == "build" and step.target == "mod"
+end)(), module and vim.inspect(module.before))
 
 local manual = state.configuration("greet")
 h.eq("manual runtime preserved", manual and manual.runtime, "shared")
@@ -255,7 +279,33 @@ h.eq("build preset persisted", state.cmake_settings().build_preset, "e2e-build")
 h.eq("test preset persisted", state.cmake_settings().test_preset, "e2e-test")
 h.check("auto configuration persisted", state.configuration("hello") ~= nil)
 h.eq("auto runtime persisted", state.configuration("shared") and state.configuration("shared").runtime, "shared")
-h.eq("auto before-launch persisted", state.configuration("mod") and state.configuration("mod").before.tools[1], "build")
+h.check("auto before-launch persisted", (function()
+    local cfg = state.configuration("mod")
+    local step = cfg and cfg.before and cfg.before.tools[1]
+    return type(step) == "table" and step.type == "build" and step.target == "mod"
+end)(), vim.inspect(state.configuration("mod") and state.configuration("mod").before))
 h.eq("manual runtime survives reload", state.configuration("greet") and state.configuration("greet").runtime, "shared")
+
+-- 12. public runner actions ---------------------------------------------------
+h.check("runner.build(target)", runner.build("hello") == true)
+h.check("runner.clean", runner.clean() == true)
+h.check("clean removed the executable", vim.fn.filereadable(cmake.find_target("hello") or "") == 0)
+h.check("runner.rebuild", runner.rebuild() == true)
+h.check("runner.install", runner.install() == true)
+h.check("runner.test", runner.test() == true)
+
+-- 13. launch environment/adapter helpers --------------------------------------
+local launch_cfg = config.native({
+    name = "LaunchHelpers",
+    target = "hello",
+    environment = { ORCH_TOOLCHAIN_OVERRIDE = "config", CONFIG_ENV = "yes" },
+})
+local launch_env = runner.launch_environment(launch_cfg)
+h.eq("launch env inherits toolchain", launch_env.ORCH_TOOLCHAIN_ENV, "yes")
+h.eq("launch env inherits config", launch_env.CONFIG_ENV, "yes")
+h.eq("config env wins over toolchain env", launch_env.ORCH_TOOLCHAIN_OVERRIDE, "config")
+h.eq("adapter falls back to toolchain debugger", runner.launch_adapter(launch_cfg), "gdb")
+launch_cfg.adapter = "lldb"
+h.eq("explicit adapter wins", runner.launch_adapter(launch_cfg), "lldb")
 
 h.done("CMake end-to-end")

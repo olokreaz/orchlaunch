@@ -212,6 +212,7 @@ function M.open(opts)
             props = { grow = 1, gap = 1 },
             children = {
                 api.check("before_build", { label = "Build before launch" }),
+                api.field_label("Build target", api.text("before_build_target", { singleline = true, grow = 1 })),
                 api.check("before_install", { label = "Install before launch" }),
                 api.field_label("External", api.text("before_external", { height = 3, grow = 1 })),
             },
@@ -355,20 +356,25 @@ end
 --- @return boolean build
 --- @return boolean install
 --- @return string external
+--- @return string? build_target
 function M.before_flags(before)
     local build, install = false, false
+    local build_target
     local external = {}
     for _, item in ipairs(before and before.tools or {}) do
         local kind = type(item) == "table" and item.type or item
         if kind == "build" then
             build = true
+            if type(item) == "table" then
+                build_target = item.target
+            end
         elseif kind == "install" then
             install = true
         elseif kind == "external" then
             external[#external + 1] = (type(item) == "table" and item.tool) or ""
         end
     end
-    return build, install, table.concat(external, "\n")
+    return build, install, table.concat(external, "\n"), build_target
 end
 
 --- Reads the "before launch" block produced by `api.before_fields`.
@@ -378,7 +384,8 @@ function M.collect_before(values)
     local UI = require("orchlaunch.ui")
     local tools = {}
     if values.before_build then
-        tools[#tools + 1] = "build"
+        local target = UI.trimmed(values.before_build_target)
+        tools[#tools + 1] = target ~= "" and { type = "build", target = target } or "build"
     end
     if values.before_install then
         tools[#tools + 1] = "install"

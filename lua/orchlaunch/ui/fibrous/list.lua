@@ -20,13 +20,13 @@ end
 
 --- @class OrchFibrousListSpec
 --- @field title string
---- @field new_label string e.g. " New profile (a) "
+--- @field new_label? string e.g. " New profile (a) "
 --- @field items fun(): table[]
 --- @field label fun(item: table, active: string?): string
 --- @field details fun(item: table, active: string?): string
---- @field find fun(name: string): table?
---- @field open fun(existing: table?, on_saved: fun())
---- @field remove fun(name: string)
+--- @field find? fun(name: string): table?
+--- @field open? fun(existing: table?, on_saved: fun())
+--- @field remove? fun(name: string)
 --- @field key? fun(item: table): string Defaults to `item.name`.
 --- @field label_hl? fun(item: table, active: string?): string? Text highlight for a row.
 --- @field empty_text? string
@@ -100,6 +100,9 @@ function M.open(spec)
     end
 
     local function open_editor(existing)
+        if not spec.open then
+            return
+        end
         if spec.solo then
             close()
             spec.open(existing, reopen)
@@ -109,6 +112,9 @@ function M.open(spec)
     end
 
     local function edit_item()
+        if not spec.open then
+            return
+        end
         local item = current()
         if not item then
             vim.notify("[orchlaunch] no item selected", ERROR)
@@ -118,6 +124,9 @@ function M.open(spec)
     end
 
     local function delete_item()
+        if not spec.remove then
+            return
+        end
         local item = current()
         if not item then
             vim.notify("[orchlaunch] no item selected", ERROR)
@@ -217,7 +226,16 @@ function M.open(spec)
 
         local details = item and spec.details(item, active) or empty
 
-        local hints = { vim.trim(spec.new_label), "e  Edit", "D  Delete" }
+        local hints = {}
+        if spec.new_label then
+            hints[#hints + 1] = vim.trim(spec.new_label)
+        end
+        if spec.open then
+            hints[#hints + 1] = "e  Edit"
+        end
+        if spec.remove then
+            hints[#hints + 1] = "D  Delete"
+        end
         if spec.set_active then
             hints[#hints + 1] = "A  Set Active"
         end
@@ -318,11 +336,15 @@ function M.open(spec)
     map("<Up>", function()
         move_to((selected and selected.get() or 1) - 1)
     end)
-    map("a", function()
-        open_editor(nil)
-    end)
-    map("e", edit_item)
-    map("D", delete_item)
+    if spec.open then
+        map("a", function()
+            open_editor(nil)
+        end)
+        map("e", edit_item)
+    end
+    if spec.remove then
+        map("D", delete_item)
+    end
     if spec.set_active then
         map("A", set_active)
     end
