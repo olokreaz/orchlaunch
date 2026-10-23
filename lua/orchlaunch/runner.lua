@@ -359,12 +359,28 @@ end
 
 --- @param name string
 --- @param mode "run" | "debug"
-local function launch_compound(name, mode)
+--- @param stack? string[] Compound configurations currently being expanded.
+local function launch_compound(name, mode, stack)
+    stack = stack or {}
+
+    for _, ancestor in ipairs(stack) do
+        if ancestor == name then
+            notify(
+                ("compound configuration cycle detected: %s -> %s"):format(table.concat(stack, " -> "), name),
+                ERROR
+            )
+            return
+        end
+    end
+
+    stack[#stack + 1] = name
     local cfg = state.require_configuration(name)
 
     for _, child in ipairs(cfg.configurations or {}) do
-        M.run(child, { mode = mode })
+        M.run(child, { mode = mode, _compound_stack = stack })
     end
+
+    stack[#stack] = nil
 end
 
 --- @param name string
@@ -385,10 +401,11 @@ end
 
 --- Runs (or debugs) a configuration by name.
 ---@param name string
----@param opts? { mode?: "run" | "debug" }
+---@param opts? { mode?: "run" | "debug", _compound_stack?: string[] }
 function M.run(name, opts)
     opts = opts or {}
     local mode = opts.mode or "run"
+    local stack = opts._compound_stack or {}
 
     if not state.is_loaded() then
         notify("no .orch project loaded", ERROR)
@@ -402,7 +419,7 @@ function M.run(name, opts)
     end
 
     if cfg.type == "compound" then
-        launch_compound(name, mode)
+        launch_compound(name, mode, stack)
     elseif cfg.type == "remote-debug" then
         launch_remote_debug(name, mode)
     else
