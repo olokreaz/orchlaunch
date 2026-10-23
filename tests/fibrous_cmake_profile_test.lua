@@ -64,6 +64,7 @@ h.check("has test preset field", ids.test_preset)
 h.check("has no preset fields", not (ids.configure_preset or ids.build_preset))
 h.eq("new profile defaults to Ninja", handle.orch.values.generator, "Ninja")
 h.eq("new profile defaults to Debug", handle.orch.values.build_type, "Debug")
+h.check("toolchain select lists configured toolchains", vim.tbl_contains(handle.orch.toolchain_options, "Clang"))
 
 local cells = handle.orch._field_cells()
 h.eq("flash locates every field", #cells, #handle.orch.fields)

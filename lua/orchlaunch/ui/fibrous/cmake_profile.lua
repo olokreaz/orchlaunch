@@ -164,7 +164,7 @@ function M.open(existing, on_saved, opts)
     }
 
     local toolchain_options = { "(none)" }
-    for _, toolchain in ipairs(state.toolchains()) do
+    for _, toolchain in ipairs(state.toolchains().toolchains) do
         toolchain_options[#toolchain_options + 1] = toolchain.name
     end
 
@@ -313,6 +313,7 @@ function M.open(existing, on_saved, opts)
                 set = api.set,
                 save = api.save,
                 close = api.close,
+                toolchain_options = toolchain_options,
                 _field_cells = api.cells,
             }
         end,
