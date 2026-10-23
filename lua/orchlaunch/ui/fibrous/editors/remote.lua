@@ -59,7 +59,8 @@ function M.open(existing, on_saved, opts)
         collect = function(values)
             local name = vim.trim(values.name or "")
             assert(name ~= "", "configuration name is required")
-            if not existing.name and state.configuration(name) then
+            local clash = state.configuration(name)
+            if clash and (not existing.name or clash.name ~= existing.name) then
                 error(("configuration already exists: %s"):format(name))
             end
             return config.remote_debug({

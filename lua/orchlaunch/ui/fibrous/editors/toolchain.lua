@@ -46,7 +46,8 @@ function M.open(existing, on_saved)
         collect = function(values)
             local name = vim.trim(values.name or "")
             assert(name ~= "", "toolchain name is required")
-            if not existing.name and state.toolchain(name) then
+            local clash = state.toolchain(name)
+            if clash and (not existing.name or clash.name ~= existing.name) then
                 error(("toolchain already exists: %s"):format(name))
             end
             return config.toolchain({

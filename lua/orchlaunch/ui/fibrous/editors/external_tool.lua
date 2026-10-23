@@ -59,7 +59,8 @@ function M.open(existing, on_saved)
         collect = function(values)
             local name = vim.trim(values.name or "")
             assert(name ~= "", "external tool name is required")
-            if not existing.name and state.external_tool(name) then
+            local clash = state.external_tool(name)
+            if clash and (not existing.name or clash.name ~= existing.name) then
                 error(("external tool already exists: %s"):format(name))
             end
             return config.external_tool({

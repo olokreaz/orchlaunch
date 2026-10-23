@@ -118,7 +118,14 @@ end
 ---@param item table
 ---@return table
 local function update_named(container, field, name, item)
+    assert(type(item) == "table" and type(item.name) == "string" and item.name ~= "", "[orchlaunch] item requires `name`")
+
     local list = container[field]
+    local clash = find_by_name(list, item.name)
+    if clash and clash.name ~= name then
+        error(("[orchlaunch] %s already exists: %s"):format(field, item.name))
+    end
+
     for index, current in ipairs(list) do
         if current.name == name then
             list[index] = item

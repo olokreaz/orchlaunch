@@ -154,6 +154,21 @@ h.check("native editor rejects a duplicate name", noted("already exists"), last_
 h.check("duplicate editor stays open", vim.api.nvim_win_is_valid(dup.winid))
 dup.orch.close()
 
+-- renaming an existing configuration onto another name is rejected as well
+local before_rename = #state.run_configurations().configurations
+notifications = {}
+local ren = require("orchlaunch.ui.fibrous.editors.native").open(state.configuration("Game"), nil)
+vim.wait(150)
+ren.orch.set("name", "Attach")
+ren.orch.save()
+vim.wait(50)
+h.check("native editor rejects a rename to a duplicate name", noted("already exists"), last_notify())
+h.eq("duplicate rename leaves the collection unchanged", #state.run_configurations().configurations, before_rename)
+h.eq("duplicate rename keeps Game native", state.configuration("Game").type, "native")
+h.eq("duplicate rename keeps Attach remote", state.configuration("Attach").type, "remote-debug")
+h.check("rename editor stays open", vim.api.nvim_win_is_valid(ren.winid))
+ren.orch.close()
+
 -- ============================================================================
 -- 3. remote debug editor
 -- ============================================================================
