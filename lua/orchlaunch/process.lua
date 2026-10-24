@@ -68,12 +68,49 @@ local function build_options(spec)
     return opts
 end
 
+--- True when a process completed successfully (exit code 0, no signal).
+---@param result? OrchProcessResult
+---@return boolean
+function M.succeeded(result)
+    return result ~= nil and result.code == 0 and (result.signal or 0) == 0
+end
+
 --- Starts a process asynchronously.
+---
+--- A missing executable makes `vim.system` raise ENOENT. Convert that into a
+--- normal completed result instead of leaking a Lua traceback into commands and
+--- autocommands.
 ---@param spec OrchProcessSpec
 ---@param on_exit? fun(result: vim.SystemCompleted)
 ---@return vim.SystemObj
 function M.start(spec, on_exit)
-    return vim.system(build_command(spec), build_options(spec), on_exit)
+    local ok, result = pcall(function()
+        return vim.system(build_command(spec), build_options(spec), on_exit)
+    end)
+    if ok then
+        return result
+    end
+
+    local failure = {
+        code = 127,
+        signal = 0,
+        stdout = "",
+        stderr = ("%s: %s"):format(spec.program or "process", tostring(result)),
+    }
+    if on_exit then
+        vim.schedule(function()
+            on_exit(failure)
+        end)
+    end
+
+    return {
+        wait = function()
+            return failure
+        end,
+        kill = function()
+            return true
+        end,
+    }
 end
 
 --- Runs a process synchronously and returns its result.

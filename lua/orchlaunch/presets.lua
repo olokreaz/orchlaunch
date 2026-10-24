@@ -244,15 +244,144 @@ function M.list(presets, kind)
     return presets[kind] or {}
 end
 
---- Only the presets a user may select (hidden ones excluded).
+--- Evaluates a CMake preset `condition` expression.
+---
+--- Supports the Boolean subset (`const`, `not`, `and`, `or`) and the common
+--- comparison operators (`equals`, `in`, `matches`) with `$env{}`/`$penv{}`
+--- expansion. Returns nil for an unsupported expression, so callers can choose
+--- to exclude the preset instead of showing a preset that may not be valid.
+---@param condition any
+---@param ctx? table
+---@return boolean?
+function M.condition(condition, ctx)
+    if condition == nil then
+        return true
+    end
+
+    ctx = ctx or {}
+    local env = ctx.env or vim.fn.environ()
+    local expand_ctx = {
+        env = env,
+        penv = ctx.penv or env,
+        source_dir = ctx.source_dir,
+        source_parent_dir = ctx.source_parent_dir,
+        source_dir_name = ctx.source_dir_name,
+        file_dir = ctx.file_dir,
+        preset_name = ctx.preset_name,
+    }
+
+    local function string_value(value)
+        if type(value) == "string" then
+            return expand(value, expand_ctx)
+        end
+        return value
+    end
+
+    local function as_bool(value)
+        value = string_value(value)
+        if type(value) == "boolean" then
+            return value
+        end
+        if type(value) == "number" then
+            return value ~= 0
+        end
+        if type(value) == "string" then
+            return value ~= "" and value ~= "0" and value:lower() ~= "false"
+        end
+        return nil
+    end
+
+    local evaluate
+    evaluate = function(node)
+        if node == nil then
+            return nil
+        end
+        if type(node) ~= "table" then
+            return as_bool(node)
+        end
+
+        local op, arg = next(node)
+        if op == "const" then
+            return as_bool(arg)
+        elseif op == "not" then
+            local value = evaluate(arg)
+            if value == nil then
+                return nil
+            end
+            return not value
+        elseif op == "and" or op == "or" then
+            if type(arg) ~= "table" then
+                return nil
+            end
+            local saw_unknown = false
+            for _, item in ipairs(arg) do
+                local value = evaluate(item)
+                if op == "and" and value == false then
+                    return false
+                end
+                if op == "or" and value == true then
+                    return true
+                end
+                if value == nil then
+                    saw_unknown = true
+                end
+            end
+            if saw_unknown then
+                return nil
+            end
+            return op == "and"
+        elseif op == "equals" then
+            if type(arg) ~= "table" or #arg ~= 2 then
+                return nil
+            end
+            return tostring(string_value(arg[1])) == tostring(string_value(arg[2]))
+        elseif op == "in" then
+            if type(arg) ~= "table" or #arg ~= 2 or type(arg[2]) ~= "table" then
+                return nil
+            end
+            local needle = tostring(string_value(arg[1]))
+            for _, item in ipairs(arg[2]) do
+                if tostring(string_value(item)) == needle then
+                    return true
+                end
+            end
+            return false
+        elseif op == "matches" then
+            if type(arg) ~= "table" or #arg ~= 2 then
+                return nil
+            end
+            local value = tostring(string_value(arg[1]))
+            local pattern = tostring(string_value(arg[2]))
+            local ok, matched = pcall(string.match, value, pattern)
+            return ok and matched ~= nil
+        end
+
+        return nil
+    end
+
+    return evaluate(condition)
+end
+
+--- Only the presets a user may select (hidden or false-condition presets are
+--- excluded).
 ---@param presets OrchCMakePresets
 ---@param kind string
+---@param ctx? table
 ---@return OrchCMakePreset[]
-function M.visible(presets, kind)
+function M.visible(presets, kind, ctx)
     local out = {}
     for _, preset in ipairs(presets[kind] or {}) do
         if preset.hidden ~= true then
-            out[#out + 1] = preset
+            local allowed = preset.condition == nil
+            if not allowed then
+                local preset_ctx = vim.tbl_extend("force", {}, ctx or {})
+                preset_ctx.preset_name = preset.name
+                preset_ctx.file_dir = preset._file_dir
+                allowed = M.condition(preset.condition, preset_ctx) == true
+            end
+            if allowed then
+                out[#out + 1] = preset
+            end
         end
     end
     return out
@@ -314,25 +443,42 @@ end
 ---@param cache table<string, table>
 ---@param stack table<string, boolean>
 ---@return table?
+---@return string? error
 local function resolve_one(name, map, cache, stack)
     if cache[name] then
         return cache[name]
     end
 
     local preset = map[name]
-    if not preset or stack[name] then
+    if not preset then
         return nil
+    end
+    if stack[name] then
+        return nil, ("preset inheritance cycle at %q"):format(name)
     end
     stack[name] = true
 
     local resolved = {}
     local inherits = preset.inherits
-    if type(inherits) == "string" then
+    if inherits == nil then
+        inherits = {}
+    elseif type(inherits) == "string" then
         inherits = { inherits }
+    elseif type(inherits) ~= "table" or (not vim.islist(inherits) and next(inherits) ~= nil) then
+        stack[name] = nil
+        return nil, ("preset %q has an invalid `inherits` value"):format(name)
     end
 
-    for _, parent in ipairs(inherits or {}) do
-        local parent_resolved = resolve_one(parent, map, cache, stack)
+    for _, parent in ipairs(inherits) do
+        if type(parent) ~= "string" then
+            stack[name] = nil
+            return nil, ("preset %q has a non-string `inherits` entry"):format(name)
+        end
+        local parent_resolved, err = resolve_one(parent, map, cache, stack)
+        if err then
+            stack[name] = nil
+            return nil, err
+        end
         if parent_resolved then
             resolved = merge(resolved, parent_resolved)
         end
@@ -350,6 +496,7 @@ end
 ---@param kind string
 ---@param name string
 ---@return table?
+---@return string? error
 function M.resolve(presets, kind, name)
     local map = {}
     for _, preset in ipairs(presets[kind] or {}) do

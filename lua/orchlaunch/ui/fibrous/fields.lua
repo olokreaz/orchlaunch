@@ -31,6 +31,7 @@ local M = {}
 --- @param handle table fibrous mount handle
 --- @return table { cells: fun(): table[] } test hook
 function M.attach(handle)
+    local augroup = util.unique_augroup("OrchlaunchFibrousFields")
     local function dlog(line)
         util.dlog("module", line)
     end
@@ -229,12 +230,17 @@ function M.attach(handle)
     wire_field_keys()
     vim.schedule(wire_field_keys)
     vim.api.nvim_create_autocmd({ "BufWinEnter", "WinNew", "BufEnter", "WinEnter" }, {
-        group = vim.api.nvim_create_augroup("OrchlaunchFibrousFields", { clear = true }),
+        group = vim.api.nvim_create_augroup(augroup, { clear = true }),
         callback = wire_field_keys,
     })
     vim.keymap.set("n", "s", flash, { buffer = handle.bufnr, nowait = true, silent = true })
 
-    return { cells = field_cells }
+    return {
+        cells = field_cells,
+        cleanup = function()
+            pcall(vim.api.nvim_del_augroup_by_name, augroup)
+        end,
+    }
 end
 
 return M

@@ -6,6 +6,16 @@
 
 local M = {}
 
+local augroup_seq = 0
+
+--- Returns a fresh augroup name for one dialog instance.
+---@param prefix string
+---@return string
+function M.unique_augroup(prefix)
+    augroup_seq = augroup_seq + 1
+    return ("%s_%d"):format(prefix, augroup_seq)
+end
+
 --- @return boolean Whether fibrous.nvim can be required.
 function M.available()
     return (pcall(require, "fibrous")) == true

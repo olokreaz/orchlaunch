@@ -77,8 +77,9 @@ function M.open()
                     if not target then
                         return
                     end
-                    runner.build(target.name)
-                    ctx.refresh()
+                    runner.build_async(target.name, function()
+                        pcall(ctx.refresh)
+                    end)
                 end,
             },
             {
@@ -90,7 +91,7 @@ function M.open()
                     ensure_configuration(target)
                     ctx.close()
                     vim.schedule(function()
-                        runner.run(target.name, { mode = "run" })
+                        runner.run(target.name, { mode = "run", async = true })
                     end)
                 end,
             },
@@ -103,7 +104,7 @@ function M.open()
                     ensure_configuration(target)
                     ctx.close()
                     vim.schedule(function()
-                        runner.run(target.name, { mode = "debug" })
+                        runner.run(target.name, { mode = "debug", async = true })
                     end)
                 end,
             },

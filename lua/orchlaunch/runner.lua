@@ -53,6 +53,36 @@ end
 -- CMake steps
 -- ============================================================================
 
+--- @type vim.SystemObj?
+local active_job = nil
+local active_label = nil
+
+--- Reports a completed CMake step in the quickfix list.
+---@param label string
+---@param spec OrchProcessSpec
+---@param result OrchProcessResult
+---@return boolean
+local function report_cmake_result(label, spec, result)
+    -- Compiler diagnostics go to the standard quickfix list; trouble.nvim,
+    -- snacks.nvim and `:copen` render it without any OrchLaunch-specific UI.
+    local output = (result.stdout or "") .. "\n" .. (result.stderr or "")
+    local qf_cwd = label == "configure" and spec.cwd or cmake.binary_dir()
+    integrations.quickfix(("OrchLaunch: CMake %s"):format(label), output, qf_cwd)
+
+    if not process.succeeded(result) then
+        local detail = (result.stderr or ""):gsub("%s+$", "")
+        if detail ~= "" then
+            detail = ": " .. detail
+        end
+        local status = (result.signal or 0) ~= 0 and ("signal %d"):format(result.signal)
+            or ("code %d"):format(result.code)
+        notify(("CMake %s failed with %s%s"):format(label, status, detail), ERROR)
+        return false
+    end
+
+    return true
+end
+
 --- Runs a CMake step spec synchronously, returning false on failure.
 ---@param label string
 ---@param spec OrchProcessSpec
@@ -60,23 +90,62 @@ end
 local function run_cmake_spec(label, spec)
     spec.timeout = spec.timeout or DEFAULT_TIMEOUT_MS
     local result = process.run(spec)
+    return report_cmake_result(label, spec, result)
+end
 
-    -- Compiler diagnostics go to the standard quickfix list; trouble.nvim,
-    -- snacks.nvim and `:copen` render it without any OrchLaunch-specific UI.
-    local output = (result.stdout or "") .. "\n" .. (result.stderr or "")
-    local qf_cwd = label == "configure" and spec.cwd or cmake.binary_dir()
-    integrations.quickfix(("OrchLaunch: CMake %s"):format(label), output, qf_cwd)
+--- Runs a process asynchronously and delivers the result on the main loop.
+---@param spec OrchProcessSpec
+---@param label string
+---@param on_done fun(result: OrchProcessResult)
+local function start_async(spec, label, on_done)
+    active_label = label
+    local finished = false
 
-    if result.code ~= 0 then
-        local detail = (result.stderr or ""):gsub("%s+$", "")
-        if detail ~= "" then
-            detail = ": " .. detail
+    local function finish(result)
+        if finished then
+            return
         end
-        notify(("CMake %s failed with code %d%s"):format(label, result.code, detail), ERROR)
-        return false
+        finished = true
+        active_job = nil
+        active_label = nil
+        vim.schedule(function()
+            on_done(result)
+        end)
     end
 
-    return true
+    spec.timeout = spec.timeout or DEFAULT_TIMEOUT_MS
+    local job = process.start(spec, finish)
+    active_job = job
+end
+
+--- Runs a CMake step asynchronously.
+---@param label string
+---@param spec OrchProcessSpec
+---@param on_done fun(ok: boolean)
+local function run_cmake_spec_async(label, spec, on_done)
+    start_async(spec, label, function(result)
+        on_done(report_cmake_result(label, spec, result))
+    end)
+end
+
+--- Cancels the most recently started asynchronous build/tool step.
+---@return boolean cancelled
+function M.cancel()
+    if not active_job then
+        notify("no build or tool step is running", WARN)
+        return false
+    end
+    local job = active_job
+    local label = active_label
+    active_job = nil
+    active_label = nil
+    local ok = pcall(job.kill, job, 15)
+    if ok then
+        notify(("cancelled %s"):format(label or "process"), WARN)
+    else
+        notify("failed to cancel the running process", ERROR)
+    end
+    return ok
 end
 
 --- Configures (and optionally builds/installs) the project before launch.
@@ -99,6 +168,26 @@ local function run_cmake_step(step, target)
     end
 
     return true
+end
+
+--- Asynchronous version of `run_cmake_step`.
+---@param step "build" | "install"
+---@param target? string
+---@param on_done fun(ok: boolean)
+local function run_cmake_step_async(step, target, on_done)
+    run_cmake_spec_async("configure", cmake.configure_spec(), function(ok)
+        if not ok then
+            on_done(false)
+            return
+        end
+        run_cmake_spec_async("build", cmake.build_spec(target), function(built)
+            if not built or step ~= "install" then
+                on_done(built)
+                return
+            end
+            run_cmake_spec_async("install", cmake.install_spec(), on_done)
+        end)
+    end)
 end
 
 --- Runs only the CMake configure step.
@@ -174,6 +263,117 @@ function M.test()
     return true
 end
 
+--- @param cb? fun(ok: boolean)
+--- @return boolean ok
+function M.configure_async(cb)
+    run_cmake_spec_async("configure", cmake.configure_spec(), function(ok)
+        if ok then
+            notify("CMake configure finished")
+        end
+        if cb then
+            cb(ok)
+        end
+    end)
+    return true
+end
+
+--- @param target? string
+--- @param cb? fun(ok: boolean)
+--- @return boolean ok
+function M.build_async(target, cb)
+    run_cmake_step_async("build", target, function(ok)
+        if ok then
+            notify(target and ("build finished: " .. target) or "build finished")
+        end
+        if cb then
+            cb(ok)
+        end
+    end)
+    return true
+end
+
+--- @param cb? fun(ok: boolean)
+--- @return boolean ok
+function M.clean_async(cb)
+    run_cmake_spec_async("clean", cmake.build_spec("clean"), function(ok)
+        if ok then
+            notify("clean finished")
+        end
+        if cb then
+            cb(ok)
+        end
+    end)
+    return true
+end
+
+--- @param target? string
+--- @param cb? fun(ok: boolean)
+--- @return boolean ok
+function M.rebuild_async(target, cb)
+    run_cmake_spec_async("clean", cmake.build_spec("clean"), function(cleaned)
+        if not cleaned then
+            if cb then
+                cb(false)
+            end
+            return
+        end
+        run_cmake_step_async("build", target, function(ok)
+            if ok then
+                notify(target and ("rebuild finished: " .. target) or "rebuild finished")
+            end
+            if cb then
+                cb(ok)
+            end
+        end)
+    end)
+    return true
+end
+
+--- @param target? string
+--- @param cb? fun(ok: boolean)
+--- @return boolean ok
+function M.install_async(target, cb)
+    run_cmake_step_async("install", target, function(ok)
+        if ok then
+            notify("install finished")
+        end
+        if cb then
+            cb(ok)
+        end
+    end)
+    return true
+end
+
+--- @param cb? fun(ok: boolean)
+--- @return boolean ok
+function M.test_async(cb)
+    run_cmake_spec_async("configure", cmake.configure_spec(), function(configured)
+        if not configured then
+            if cb then
+                cb(false)
+            end
+            return
+        end
+        run_cmake_spec_async("build", cmake.build_spec(), function(built)
+            if not built then
+                if cb then
+                    cb(false)
+                end
+                return
+            end
+            run_cmake_spec_async("test", cmake.test_spec(), function(ok)
+                if ok then
+                    notify("tests finished")
+                end
+                if cb then
+                    cb(ok)
+                end
+            end)
+        end)
+    end)
+    return true
+end
+
 --- Saves the project so `cmake_settings.json` reflects the current selection.
 local function ensure_settings_saved()
     pcall(state.save)
@@ -206,7 +406,7 @@ local function run_before(before)
             end
 
             local result = run_tool(tool)
-            if result.code ~= 0 then
+            if not process.succeeded(result) then
                 notify(("external tool %q failed with code %d"):format(name, result.code), ERROR)
                 return false
             end
@@ -218,13 +418,263 @@ local function run_before(before)
     return true
 end
 
+--- Asynchronous external-tool runner.
+---@param tool OrchExternalTool
+---@param on_done fun(result: OrchProcessResult)
+local function run_tool_async(tool, on_done)
+    start_async(tool_spec(tool), "external tool " .. tool.name, on_done)
+end
+
+--- Asynchronous before-launch chain.
+---@param before? OrchBefore
+---@param on_done fun(ok: boolean)
+local function run_before_async(before, on_done)
+    local items = before and before.tools or {}
+    local index = 0
+
+    local function next_item()
+        index = index + 1
+        local item = items[index]
+        if item == nil then
+            on_done(true)
+            return
+        end
+
+        local kind = type(item) == "table" and item.type or item
+        if kind == "build" or kind == "install" then
+            ensure_settings_saved()
+            local target = type(item) == "table" and item.target or nil
+            run_cmake_step_async(kind, target, function(ok)
+                if ok then
+                    next_item()
+                else
+                    on_done(false)
+                end
+            end)
+        elseif kind == "external" then
+            local name = type(item) == "table" and item.tool or nil
+            local tool = name and state.external_tool(name)
+            if not tool then
+                notify(("before-launch references unknown external tool: %s"):format(tostring(name)), ERROR)
+                on_done(false)
+                return
+            end
+
+            run_tool_async(tool, function(result)
+                if not process.succeeded(result) then
+                    local detail = (result.stderr or ""):gsub("%s+$", "")
+                    notify(
+                        ("external tool %q failed with code %d%s"):format(
+                            name,
+                            result.code,
+                            detail ~= "" and (": " .. detail) or ""
+                        ),
+                        ERROR
+                    )
+                    on_done(false)
+                else
+                    next_item()
+                end
+            end)
+        else
+            notify(("unknown before-launch action: %s"):format(tostring(kind)), WARN)
+            next_item()
+        end
+    end
+
+    next_item()
+end
+
+---@param cfg OrchNativeConfiguration
+---@return string?
+local function resolve_program(cfg)
+    local target = cfg.target
+    if not target or target == "" then
+        return nil
+    end
+    local program = state.resolve_path(target)
+    local looks_like_path = target:find("[/\\]") ~= nil or vim.fn.filereadable(program or "") == 1
+    if looks_like_path then
+        return program
+    end
+    return cmake.find_target(target)
+end
+
+--- Asynchronous native launch/debug path.
+---@param name string
+---@param mode "run" | "debug"
+---@param on_done fun(ok: boolean)
+local function launch_native_async(name, mode, on_done)
+    local cfg = state.require_configuration(name)
+
+    run_before_async(cfg.before, function(proceed)
+        if not proceed then
+            on_done(false)
+            return
+        end
+
+        if not cfg.target or cfg.target == "" then
+            if mode == "debug" then
+                notify(("configuration %q has no executable; cannot debug"):format(name), WARN)
+                on_done(false)
+            else
+                notify(("configuration %q has no executable; build steps completed"):format(name), WARN)
+                on_done(true)
+            end
+            return
+        end
+
+        local program = resolve_program(cfg)
+        if not program then
+            notify(
+                ("cannot resolve CMake target %q; build it first or set target to an executable path"):format(
+                    tostring(cfg.target)
+                ),
+                ERROR
+            )
+            on_done(false)
+            return
+        end
+
+        if mode == "debug" then
+            if cfg.sudo then
+                notify(("configuration %q requests sudo; debug adapters cannot elevate"):format(name), WARN)
+            end
+            local config = require("orchlaunch.debug").start(cfg, {
+                type = "launch",
+                adapter = M.launch_adapter(cfg),
+                program = program,
+                args = state.resolve_list(cfg.args),
+                cwd = state.resolve_path(cfg.cwd) or state.root(),
+                env = M.launch_environment(cfg),
+            })
+            on_done(config ~= nil)
+            return
+        end
+
+        local spec = {
+            program = program,
+            args = state.resolve_list(cfg.args),
+            cwd = state.resolve_path(cfg.cwd) or state.root(),
+            env = M.launch_environment(cfg),
+            inherit_env = cfg.inherit_env ~= false,
+            sudo = cfg.sudo == true,
+        }
+
+        local console = cfg.console
+        if type(console) ~= "table" then
+            console = {}
+        end
+        local console_mode = console.mode or "embedded"
+        if console_mode ~= "embedded" and console_mode ~= "hidden" and console_mode ~= "none" then
+            notify(("unknown console mode %q; using embedded"):format(console_mode), WARN)
+            console_mode = "embedded"
+        end
+
+        if console_mode == "embedded" then
+            open_terminal(spec, console)
+            on_done(true)
+            return
+        end
+
+        local job
+        job = process.start(spec, function(result)
+            vim.schedule(function()
+                if active_job == job then
+                    active_job = nil
+                    active_label = nil
+                end
+                if console_mode ~= "none" then
+                    notify(("%q finished with code %d"):format(name, result.code))
+                end
+            end)
+        end)
+        active_job = job
+        active_label = name
+        on_done(true)
+    end)
+end
+
+--- Asynchronous remote-debug path.
+---@param name string
+---@param mode "run" | "debug"
+---@param on_done fun(ok: boolean)
+local function launch_remote_debug_async(name, mode, on_done)
+    if mode ~= "debug" then
+        notify(("remote-debug configuration %q is only available in debug mode"):format(name), WARN)
+        on_done(false)
+        return
+    end
+
+    local cfg = state.require_configuration(name)
+    run_before_async(cfg.before, function(proceed)
+        if not proceed then
+            on_done(false)
+            return
+        end
+        local config = require("orchlaunch.debug").start(cfg, {
+            type = "attach",
+            connection = cfg.connection,
+            program = cfg.symbol,
+        })
+        on_done(config ~= nil)
+    end)
+end
+
+--- Asynchronous compound expansion (children run in declaration order).
+---@param name string
+---@param mode "run" | "debug"
+---@param stack string[]
+---@param on_done fun(ok: boolean)
+local function launch_compound_async(name, mode, stack, on_done)
+    for _, ancestor in ipairs(stack) do
+        if ancestor == name then
+            notify(
+                ("compound configuration cycle detected: %s -> %s"):format(table.concat(stack, " -> "), name),
+                ERROR
+            )
+            on_done(false)
+            return
+        end
+    end
+
+    stack[#stack + 1] = name
+    local cfg = state.require_configuration(name)
+    local children = cfg.configurations or {}
+    local index = 0
+    local all_ok = true
+
+    local function next_child()
+        index = index + 1
+        if index > #children then
+            stack[#stack] = nil
+            on_done(all_ok)
+            return
+        end
+        M.run(children[index], {
+            mode = mode,
+            _compound_stack = stack,
+            async = true,
+            _on_done = function(ok)
+                if not ok then
+                    all_ok = false
+                end
+                next_child()
+            end,
+        })
+    end
+
+    next_child()
+end
+
 -- ============================================================================
 -- Terminal
 -- ============================================================================
 
 --- Opens an embedded terminal running the given spec.
 ---@param spec OrchProcessSpec
-local function open_terminal(spec)
+---@param console OrchConsole
+local function open_terminal(spec, console)
     vim.cmd("botright new")
     local buf = vim.api.nvim_get_current_buf()
     vim.bo[buf].bufhidden = "wipe"
@@ -239,7 +689,32 @@ local function open_terminal(spec)
         options.clear_env = true
     end
 
-    vim.fn.termopen(process.command(spec), options)
+    local channel = vim.fn.termopen(process.command(spec), options)
+    if channel <= 0 then
+        notify("failed to start the embedded terminal", ERROR)
+        return
+    end
+
+    if console.clear_on_start ~= false then
+        vim.api.nvim_buf_call(buf, function()
+            vim.cmd("clear")
+        end)
+    end
+
+    if console.keep_open == false then
+        vim.api.nvim_create_autocmd("TermClose", {
+            buffer = buf,
+            once = true,
+            callback = function()
+                vim.schedule(function()
+                    if vim.api.nvim_buf_is_valid(buf) then
+                        pcall(vim.api.nvim_buf_delete, buf, { force = true })
+                    end
+                end)
+            end,
+        })
+    end
+
     vim.cmd("startinsert")
 end
 
@@ -247,11 +722,15 @@ end
 -- Configuration dispatch
 -- ============================================================================
 
---- Toolchain environment first, then the configuration's own environment.
+--- Toolchain environment first, then the active CMake profile, then the
+--- configuration's own environment (most specific wins).
 ---@param cfg OrchNativeConfiguration
 ---@return OrchEnvironment
 function M.launch_environment(cfg)
     local env = cmake.toolchain_environment()
+    for key, value in pairs(cmake.profile_environment()) do
+        env[key] = value
+    end
     for key, value in pairs(state.resolve_environment(cfg.environment)) do
         env[key] = value
     end
@@ -341,11 +820,18 @@ local function launch_native(name, mode)
         sudo = cfg.sudo == true,
     }
 
-    local console = cfg.console or {}
+    local console = cfg.console
+    if type(console) ~= "table" then
+        console = {}
+    end
     local console_mode = console.mode or "embedded"
+    if console_mode ~= "embedded" and console_mode ~= "hidden" and console_mode ~= "none" then
+        notify(("unknown console mode %q; using embedded"):format(console_mode), WARN)
+        console_mode = "embedded"
+    end
 
     if console_mode == "embedded" then
-        open_terminal(spec)
+        open_terminal(spec, console)
     else
         process.start(spec, function(result)
             vim.schedule(function()
@@ -406,15 +892,32 @@ function M.run(name, opts)
     opts = opts or {}
     local mode = opts.mode or "run"
     local stack = opts._compound_stack or {}
+    local on_done = opts._on_done or function() end
 
     if not state.is_loaded() then
         notify("no .orch project loaded", ERROR)
+        on_done(false)
         return
     end
 
     local cfg = state.configuration(name)
     if not cfg then
         notify(("configuration not found: %s"):format(name), ERROR)
+        on_done(false)
+        return
+    end
+
+    if opts.async then
+        if cfg.type == "compound" then
+            launch_compound_async(name, mode, stack, on_done)
+        elseif cfg.type == "remote-debug" then
+            launch_remote_debug_async(name, mode, on_done)
+        elseif cfg.type == "native" then
+            launch_native_async(name, mode, on_done)
+        else
+            notify(("unsupported configuration type %q in %s"):format(tostring(cfg.type), name), ERROR)
+            on_done(false)
+        end
         return
     end
 
@@ -422,8 +925,10 @@ function M.run(name, opts)
         launch_compound(name, mode, stack)
     elseif cfg.type == "remote-debug" then
         launch_remote_debug(name, mode)
-    else
+    elseif cfg.type == "native" then
         launch_native(name, mode)
+    else
+        notify(("unsupported configuration type %q in %s"):format(tostring(cfg.type), name), ERROR)
     end
 end
 
@@ -508,7 +1013,7 @@ function M.load_cmake()
 
     local created = sync_target_configurations(targets)
 
-    if result and result.code ~= 0 then
+    if result and not process.succeeded(result) then
         local detail = (result.stderr or ""):gsub("%s+$", "")
         notify(
             ("CMake configure failed; showing %d cached target(s), %d run configuration(s) added%s"):format(
@@ -529,6 +1034,69 @@ function M.load_cmake()
         )
     )
     return targets
+end
+
+--- Asynchronously configures the project and discovers its CMake targets.
+---@param cb? fun(targets: OrchCMakeTarget[]?, created?: integer, result?: OrchProcessResult)
+---@return boolean started
+function M.load_cmake_async(cb)
+    cb = cb or function() end
+    if not state.is_loaded() then
+        notify("no .orch project loaded", ERROR)
+        cb(nil)
+        return false
+    end
+
+    ensure_settings_saved()
+
+    local job
+    local finished = false
+    job = cmake.load_targets_async(function(targets, result)
+        if finished then
+            return
+        end
+        finished = true
+        if active_job == job then
+            active_job = nil
+            active_label = nil
+        end
+
+        if not targets then
+            local detail = result and (result.stderr or ""):gsub("%s+$", "") or ""
+            notify(("CMake configure failed%s"):format(detail ~= "" and (": " .. detail) or ""), ERROR)
+            cb(nil, nil, result)
+            return
+        end
+
+        local created = sync_target_configurations(targets)
+
+        if result and not process.succeeded(result) then
+            local detail = (result.stderr or ""):gsub("%s+$", "")
+            notify(
+                ("CMake configure failed; showing %d cached target(s), %d run configuration(s) added%s"):format(
+                    #targets,
+                    created,
+                    detail ~= "" and (": " .. detail) or ""
+                ),
+                WARN
+            )
+            cb(targets, created, result)
+            return
+        end
+
+        notify(
+            ("CMake project loaded: %d target(s) discovered from %s, %d run configuration(s) added"):format(
+                #targets,
+                cmake.source_dir(),
+                created
+            )
+        )
+        cb(targets, created, result)
+    end)
+
+    active_job = job
+    active_label = "CMake load"
+    return true
 end
 
 --- Discovers CMake targets from an existing build directory without reconfiguring.
@@ -580,6 +1148,44 @@ function M.run_external_tool(name)
     end
 
     return run_tool(tool)
+end
+
+--- Runs an external tool by name asynchronously.
+---@param name string
+---@param cb? fun(result: OrchProcessResult?)
+---@return boolean started
+function M.run_external_tool_async(name, cb)
+    cb = cb or function() end
+    if not state.is_loaded() then
+        notify("no .orch project loaded", ERROR)
+        cb(nil)
+        return false
+    end
+
+    local tool = state.external_tool(name)
+    if not tool then
+        notify(("external tool not found: %s"):format(name), ERROR)
+        cb(nil)
+        return false
+    end
+
+    run_tool_async(tool, function(result)
+        if not process.succeeded(result) then
+            local detail = (result.stderr or ""):gsub("%s+$", "")
+            notify(
+                ("external tool %q failed with code %d%s"):format(
+                    name,
+                    result.code,
+                    detail ~= "" and (": " .. detail) or ""
+                ),
+                ERROR
+            )
+        else
+            notify(("external tool %q finished with code %d"):format(name, result.code))
+        end
+        cb(result)
+    end)
+    return true
 end
 
 return M

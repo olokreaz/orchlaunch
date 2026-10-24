@@ -86,8 +86,6 @@ function M.start(cfg, opts)
         return nil
     end
 
-    session.start_session()
-
     local request = build_request(cfg, opts)
     local backend = backend_registry.resolve(request)
     if not backend then
@@ -95,7 +93,14 @@ function M.start(cfg, opts)
         return nil
     end
 
-    if backend.available and not backend.available() then
+    local function available()
+        if request.dap_path and request.dap_path ~= "" then
+            return vim.fn.executable(request.dap_path) == 1 or vim.fn.exepath(request.dap_path) ~= ""
+        end
+        return backend.available and backend.available() or true
+    end
+
+    if not available() then
         vim.notify(
             ("[orchlaunch] the %s debug adapter is not installed"):format(backend.name),
             vim.log.levels.ERROR
@@ -103,19 +108,34 @@ function M.start(cfg, opts)
         return nil
     end
 
-    -- A backend may take over the whole launch (non-DAP debuggers).
-    if backend.run then
-        return backend.run(request, d)
+    -- Only mark the neutral session as starting after the backend has been
+    -- validated, otherwise a missing adapter leaves a permanent "starting"
+    -- session behind.
+    session.start_session()
+
+    local ok, result = pcall(function()
+        -- A backend may take over the whole launch (non-DAP debuggers).
+        if backend.run then
+            return backend.run(request, d)
+        end
+
+        local adapter = backend.adapter(request)
+        d.adapters[adapter.key] = d.adapters[adapter.key] or adapter.definition
+
+        local config = (request.mode == "attach") and backend.attach(request) or backend.launch(request)
+        config.type = adapter.key
+        d.run(config)
+        pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "OrchLaunchDebugStarted" })
+        return config
+    end)
+
+    if not ok then
+        session.reset()
+        vim.notify(("[orchlaunch] failed to start debugger: %s"):format(result), vim.log.levels.ERROR)
+        return nil
     end
 
-    local adapter = backend.adapter(request)
-    d.adapters[adapter.key] = d.adapters[adapter.key] or adapter.definition
-
-    local config = (request.mode == "attach") and backend.attach(request) or backend.launch(request)
-    config.type = adapter.key
-    d.run(config)
-    pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "OrchLaunchDebugStarted" })
-    return config
+    return result
 end
 
 function M.stop()

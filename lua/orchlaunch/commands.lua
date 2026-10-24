@@ -178,9 +178,9 @@ function M.register()
 
         local runner = require("orchlaunch.runner")
         if args.args ~= "" then
-            runner.run(args.args, { mode = "run" })
+            runner.run(args.args, { mode = "run", async = true })
         else
-            runner.run_active({ mode = "run" })
+            runner.run_active({ mode = "run", async = true })
         end
     end, {
         nargs = "?",
@@ -197,9 +197,9 @@ function M.register()
 
         local runner = require("orchlaunch.runner")
         if args.args ~= "" then
-            runner.run(args.args, { mode = "debug" })
+            runner.run(args.args, { mode = "debug", async = true })
         else
-            runner.run_active({ mode = "debug" })
+            runner.run_active({ mode = "debug", async = true })
         end
     end, {
         nargs = "?",
@@ -254,7 +254,10 @@ function M.register()
             return
         end
         local breakpoints = require("orchlaunch.breakpoints")
-        breakpoints.toggle({}, bufnr, line)
+        if not breakpoints.toggle({}, bufnr, line) then
+            notify("nvim-dap is not installed; breakpoints are unavailable", WARN)
+            return
+        end
         notify(("breakpoint %s at %s:%d"):format(
             breakpoints.has(bufnr, line) and "set" or "removed",
             vim.fs.basename(vim.api.nvim_buf_get_name(bufnr)), line
@@ -267,7 +270,10 @@ function M.register()
         if not ok then
             return
         end
-        require("orchlaunch.breakpoints").set({ condition = args.args }, bufnr, line)
+        if not require("orchlaunch.breakpoints").set({ condition = args.args }, bufnr, line) then
+            notify("nvim-dap is not installed; breakpoints are unavailable", WARN)
+            return
+        end
         notify(("conditional breakpoint (%s) at line %d"):format(args.args, line))
     end, { nargs = 1, desc = "Set a conditional breakpoint at the cursor" })
 
@@ -277,12 +283,18 @@ function M.register()
         if not ok then
             return
         end
-        require("orchlaunch.breakpoints").set({ log_message = args.args }, bufnr, line)
+        if not require("orchlaunch.breakpoints").set({ log_message = args.args }, bufnr, line) then
+            notify("nvim-dap is not installed; breakpoints are unavailable", WARN)
+            return
+        end
         notify(("log point (%s) at line %d"):format(args.args, line))
     end, { nargs = 1, desc = "Set a log point at the cursor" })
 
     vim.api.nvim_create_user_command("OrchLaunchClearBreakpoints", function()
-        require("orchlaunch.breakpoints").clear()
+        if not require("orchlaunch.breakpoints").clear() then
+            notify("nvim-dap is not installed; breakpoints are unavailable", WARN)
+            return
+        end
         notify("all breakpoints cleared")
     end, { desc = "Clear all breakpoints" })
 
@@ -345,7 +357,7 @@ function M.register()
         if not ensure_loaded() then
             return
         end
-        require("orchlaunch.runner").load_cmake()
+        require("orchlaunch.runner").load_cmake_async()
     end, { desc = "Configure the project and load its CMake targets" })
 
     vim.api.nvim_create_user_command("OrchLaunchRefreshTargets", function()
@@ -357,13 +369,13 @@ function M.register()
 
     vim.api.nvim_create_user_command("OrchLaunchConfigure", function()
         if ensure_loaded() then
-            require("orchlaunch.runner").configure()
+            require("orchlaunch.runner").configure_async()
         end
     end, { desc = "Configure the project with the active CMake profile" })
 
     vim.api.nvim_create_user_command("OrchLaunchBuild", function(args)
         if ensure_loaded() then
-            require("orchlaunch.runner").build(args.args ~= "" and args.args or nil)
+            require("orchlaunch.runner").build_async(args.args ~= "" and args.args or nil)
         end
     end, {
         nargs = "?",
@@ -375,7 +387,7 @@ function M.register()
 
     vim.api.nvim_create_user_command("OrchLaunchRebuild", function(args)
         if ensure_loaded() then
-            require("orchlaunch.runner").rebuild(args.args ~= "" and args.args or nil)
+            require("orchlaunch.runner").rebuild_async(args.args ~= "" and args.args or nil)
         end
     end, {
         nargs = "?",
@@ -387,13 +399,13 @@ function M.register()
 
     vim.api.nvim_create_user_command("OrchLaunchClean", function()
         if ensure_loaded() then
-            require("orchlaunch.runner").clean()
+            require("orchlaunch.runner").clean_async()
         end
     end, { desc = "Clean build outputs through the active build tool" })
 
     vim.api.nvim_create_user_command("OrchLaunchInstall", function(args)
         if ensure_loaded() then
-            require("orchlaunch.runner").install(args.args ~= "" and args.args or nil)
+            require("orchlaunch.runner").install_async(args.args ~= "" and args.args or nil)
         end
     end, {
         nargs = "?",
@@ -405,9 +417,13 @@ function M.register()
 
     vim.api.nvim_create_user_command("OrchLaunchTest", function()
         if ensure_loaded() then
-            require("orchlaunch.runner").test()
+            require("orchlaunch.runner").test_async()
         end
     end, { desc = "Build and run the CTest suite" })
+
+    vim.api.nvim_create_user_command("OrchLaunchCancel", function()
+        require("orchlaunch.runner").cancel()
+    end, { desc = "Cancel the running build or external tool step" })
 
     vim.api.nvim_create_user_command("OrchLaunchTargets", function()
         if ensure_loaded() then
@@ -420,11 +436,7 @@ function M.register()
             return
         end
 
-        local runner = require("orchlaunch.runner")
-        local result = runner.run_external_tool(args.args)
-        if result then
-            notify(("external tool %q finished with code %d"):format(args.args, result.code))
-        end
+        require("orchlaunch.runner").run_external_tool_async(args.args)
     end, {
         nargs = 1,
         desc = "Run an external tool",

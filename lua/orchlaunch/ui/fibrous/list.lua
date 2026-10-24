@@ -54,6 +54,7 @@ function M.open(spec)
     local selected --- state handle, assigned on first render
     local revision --- state handle, bumped to force a re-render after mutations
     local handle
+    local augroup = util.unique_augroup("OrchlaunchFibrousList")
 
     local function key_of(item)
         return spec.key and spec.key(item) or item.name
@@ -79,7 +80,7 @@ function M.open(spec)
     end
 
     local function close()
-        pcall(vim.api.nvim_del_augroup_by_name, "OrchlaunchFibrousList")
+        pcall(vim.api.nvim_del_augroup_by_name, augroup)
         if handle then
             handle.unmount()
         end
@@ -312,7 +313,7 @@ function M.open(spec)
     handle = nr.mount(Body, {}, mount_opts)
     handle.focus()
 
-    util.watch_resize("OrchlaunchFibrousList", mount_opts, apply_size, function()
+    util.watch_resize(augroup, mount_opts, apply_size, function()
         return handle
     end)
 

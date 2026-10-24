@@ -45,6 +45,7 @@ function M.open(opts)
     local form --- state handle, assigned on first render
     local handle
     local closed = false
+    local augroup = util.unique_augroup(opts.augroup or "OrchlaunchFibrousForm")
 
     local function value(id)
         return form and (form.get() or {})[id]
@@ -63,7 +64,10 @@ function M.open(opts)
     end
 
     local function cleanup()
-        pcall(vim.api.nvim_del_augroup_by_name, opts.augroup or "OrchlaunchFibrousForm")
+        pcall(vim.api.nvim_del_augroup_by_name, augroup)
+        if handle and handle._fields and handle._fields.cleanup then
+            handle._fields.cleanup()
+        end
     end
 
     local function close()
@@ -292,7 +296,7 @@ function M.open(opts)
     end
 
     handle._fields = fields.attach(handle)
-    util.watch_resize(opts.augroup or "OrchlaunchFibrousForm", mount_opts, apply_size, function()
+    util.watch_resize(augroup, mount_opts, apply_size, function()
         return handle
     end)
 

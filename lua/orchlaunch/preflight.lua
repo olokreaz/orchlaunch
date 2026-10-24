@@ -20,7 +20,12 @@ local function command_check(name, command, required)
     if not command then
         return { name = name, required = required ~= false, ok = true, detail = "configured" }
     end
-    local path = vim.fn.exepath(command)
+    local path
+    if command:find("[/\\]") then
+        path = vim.fn.executable(command) == 1 and command or ""
+    else
+        path = vim.fn.exepath(command)
+    end
     return {
         name = name,
         required = required ~= false,
@@ -45,19 +50,46 @@ end
 --- All checks, in a stable order.
 --- @return OrchPreflightCheck[]
 function M.checks()
-    return {
-        command_check("cmake", "cmake"),
+    local cmake_command = "cmake"
+    local c_compiler, cxx_compiler, debugger
+
+    local state_ok, state = pcall(require, "orchlaunch.state")
+    local cmake_ok, cmake = pcall(require, "orchlaunch.cmake")
+    if state_ok and cmake_ok and state.is_loaded() then
+        cmake_command = cmake.cmake_program()
+        local toolchain = cmake.toolchain()
+        if toolchain then
+            c_compiler = toolchain.c
+            cxx_compiler = toolchain.cxx
+            debugger = toolchain.debugger
+        end
+    end
+
+    local checks = {
+        command_check("cmake", cmake_command),
         command_check("ninja (optional)", "ninja", false),
-        command_check("clang", "clang", false),
-        command_check("clang++", "clang++", false),
-        command_check("gcc", "gcc", false),
-        command_check("g++", "g++", false),
-        command_check("LLDB DAP adapter (lldb-dap)", "lldb-dap", false),
-        command_check("LLDB (lldb-server)", "lldb-server", false),
-        command_check("GDB", "gdb", false),
-        module_check("nvim-dap", "dap"),
-        module_check("fibrous.nvim", "fibrous"),
     }
+    if c_compiler and c_compiler ~= "" then
+        checks[#checks + 1] = command_check("C compiler (" .. c_compiler .. ")", c_compiler, false)
+    else
+        checks[#checks + 1] = command_check("clang", "clang", false)
+        checks[#checks + 1] = command_check("gcc", "gcc", false)
+    end
+    if cxx_compiler and cxx_compiler ~= "" then
+        checks[#checks + 1] = command_check("C++ compiler (" .. cxx_compiler .. ")", cxx_compiler, false)
+    else
+        checks[#checks + 1] = command_check("clang++", "clang++", false)
+        checks[#checks + 1] = command_check("g++", "g++", false)
+    end
+    if debugger and debugger ~= "" then
+        checks[#checks + 1] = command_check("debugger (" .. debugger .. ")", debugger, false)
+    end
+    checks[#checks + 1] = command_check("LLDB DAP adapter (lldb-dap)", "lldb-dap", false)
+    checks[#checks + 1] = command_check("LLDB (lldb-server)", "lldb-server", false)
+    checks[#checks + 1] = command_check("GDB", "gdb", false)
+    checks[#checks + 1] = module_check("nvim-dap", "dap")
+    checks[#checks + 1] = module_check("fibrous.nvim", "fibrous")
+    return checks
 end
 
 --- @return OrchPreflightCheck[]

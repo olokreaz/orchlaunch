@@ -158,7 +158,7 @@ function M.open()
             return
         end
         ctx.close()
-        runner.run(item.name, { mode = mode })
+        runner.run(item.name, { mode = mode, async = true })
     end
 
     local function duplicate(item, ctx)
@@ -175,15 +175,14 @@ function M.open()
 
     local function load_cmake(_, ctx)
         local before = #state.run_configurations().configurations
-        runner.load_cmake()
-        if #state.run_configurations().configurations ~= before then
-            ctx.close()
-            vim.schedule(function()
+        runner.load_cmake_async(function()
+            if #state.run_configurations().configurations ~= before then
+                pcall(ctx.close)
                 M.open()
-            end)
-        else
-            ctx.refresh()
-        end
+            else
+                pcall(ctx.refresh)
+            end
+        end)
     end
 
     return list.open({

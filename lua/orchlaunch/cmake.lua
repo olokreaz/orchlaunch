@@ -38,6 +38,29 @@ function M.toolchain()
     return state.toolchains().toolchains[1]
 end
 
+--- Resolves the CTest executable from the active profile/toolchain, falling
+--- back to the `ctest` next to a configured CMake binary and then to `PATH`.
+---@return string
+function M.ctest_program()
+    local opts = settings()
+    local configured = opts.ctest
+    if (configured == nil or configured == "") and type(opts.definitions) == "table" then
+        configured = opts.definitions.CMAKE_CTEST_COMMAND
+    end
+    if type(configured) == "string" and configured ~= "" then
+        return state.resolve_tool(configured) or configured
+    end
+
+    local cmake_program = M.cmake_program()
+    if config.is_absolute(cmake_program) or cmake_program:find("[/\\]") then
+        local sibling = vim.fs.joinpath(vim.fs.dirname(cmake_program), "ctest")
+        if vim.fn.executable(sibling) == 1 then
+            return sibling
+        end
+    end
+    return "ctest"
+end
+
 ---@return string
 function M.cmake_program()
     local toolchain = M.toolchain()
@@ -151,6 +174,13 @@ end
 function M.toolchain_environment()
     local toolchain = M.toolchain()
     return state.resolve_environment(toolchain and toolchain.environment or {})
+end
+
+--- Environment contributed by the active CMake profile. Launch configurations
+--- need it too, not just the CMake subprocesses.
+---@return OrchEnvironment
+function M.profile_environment()
+    return state.resolve_environment(settings().environment or {})
 end
 
 --- @param resolved table?
@@ -315,9 +345,9 @@ function M.test_spec()
     local argv
 
     if name then
-        argv = { "ctest", "--preset", name }
+        argv = { M.ctest_program(), "--preset", name }
     else
-        argv = { "ctest", "--test-dir", M.binary_dir() }
+        argv = { M.ctest_program(), "--test-dir", M.binary_dir() }
         if opts.build_type and opts.build_type ~= "" then
             argv[#argv + 1] = "-C"
             argv[#argv + 1] = opts.build_type
@@ -472,24 +502,44 @@ function M.read_targets()
         return nil
     end
 
-    local targets, seen = {}, {}
-    for _, configuration in ipairs(codemodel.configurations) do
-        for _, reference in ipairs(configuration.targets or {}) do
-            local name = reference.name
-            if type(name) == "string" and not seen[name] then
-                seen[name] = true
+    local targets, by_name = {}, {}
+    for config_index, configuration in ipairs(codemodel.configurations) do
+        if type(configuration) == "table" then
+            local config_name = type(configuration.name) == "string" and configuration.name or tostring(config_index)
+            local references = configuration.targets
+            if type(references) ~= "table" then
+                references = {}
+            end
 
-                local kind = reference.type
-                local artifact
-                if type(reference.jsonFile) == "string" then
-                    local target = read_json_file(vim.fs.joinpath(reply_dir, reference.jsonFile))
-                    if target then
-                        kind = kind or target.type
-                        artifact = artifact_path(target.artifacts)
+            for _, reference in ipairs(references) do
+                if type(reference) == "table" and type(reference.name) == "string" then
+                    local name = reference.name
+                    local entry = by_name[name]
+                    if not entry then
+                        entry = { name = name, type = reference.type, artifacts = {} }
+                        by_name[name] = entry
+                        targets[#targets + 1] = entry
+                    end
+
+                    local kind = reference.type
+                    local artifact
+                    if type(reference.jsonFile) == "string" then
+                        local target = read_json_file(vim.fs.joinpath(reply_dir, reference.jsonFile))
+                        if type(target) == "table" then
+                            kind = kind or target.type
+                            artifact = artifact_path(target.artifacts)
+                        end
+                    end
+
+                    entry.type = entry.type or kind
+                    if artifact then
+                        -- Multi-config generators put artifacts in different
+                        -- directories; remember each configuration rather than
+                        -- keeping whichever configuration happened to be first.
+                        entry.artifacts[config_name] = artifact
+                        entry.artifact = entry.artifact or artifact
                     end
                 end
-
-                targets[#targets + 1] = { name = name, type = kind, artifact = artifact }
             end
         end
     end
@@ -512,7 +562,7 @@ function M.load_targets()
     M.prepare_file_api(binary_dir)
 
     local result = process.run(M.configure_spec())
-    if result.code ~= 0 then
+    if not process.succeeded(result) then
         -- Fall back to the last File API reply, if any, so targets remain
         -- available when a reconfigure fails (e.g. a missing toolchain).
         local cached = M.read_targets()
@@ -532,6 +582,53 @@ function M.load_targets()
     state.set_runtime("cmake_binary_dir", binary_dir)
 
     return targets
+end
+
+--- Configures the project asynchronously and discovers its targets.
+---
+--- `on_done` is called with the targets and the process result. On a failed
+--- configure the last File API reply is used as a fallback, when available.
+---@param on_done fun(targets: OrchCMakeTarget[]?, result: OrchProcessResult?)
+---@return vim.SystemObj? job
+function M.load_targets_async(on_done)
+    local binary_dir = M.binary_dir()
+    M.prepare_file_api(binary_dir)
+
+    local function finish(result)
+        if not process.succeeded(result) then
+            local cached = M.read_targets()
+            if cached and #cached > 0 then
+                state.set_runtime("cmake_targets", cached)
+                state.set_runtime("cmake_source_dir", M.source_dir())
+                state.set_runtime("cmake_binary_dir", binary_dir)
+                on_done(cached, result)
+                return
+            end
+
+            on_done(nil, result)
+            return
+        end
+
+        local targets = M.read_targets() or {}
+        state.set_runtime("cmake_targets", targets)
+        state.set_runtime("cmake_source_dir", M.source_dir())
+        state.set_runtime("cmake_binary_dir", binary_dir)
+        on_done(targets, result)
+    end
+
+    local ok, job = pcall(process.start, M.configure_spec(), function(result)
+        vim.schedule(function()
+            finish(result)
+        end)
+    end)
+    if not ok then
+        vim.schedule(function()
+            on_done(nil, { code = 127, stdout = "", stderr = tostring(job) })
+        end)
+        return nil
+    end
+
+    return job
 end
 
 --- Discovers CMake targets from an existing build directory without running configure.
@@ -610,8 +707,15 @@ function M.find_target(target)
     end
 
     local known = M.target(target)
-    if known and type(known.artifact) == "string" and vim.fn.filereadable(known.artifact) == 1 then
-        return known.artifact
+    if known then
+        local artifact = known.artifact
+        local build_type = settings().build_type
+        if type(known.artifacts) == "table" and type(build_type) == "string" then
+            artifact = known.artifacts[build_type] or artifact
+        end
+        if type(artifact) == "string" and vim.fn.filereadable(artifact) == 1 then
+            return artifact
+        end
     end
 
     local dir = M.binary_dir()
@@ -634,7 +738,7 @@ function M.find_target(target)
         for _, current in ipairs(queue) do
             for name, kind in vim.fs.dir(current) do
                 local full = vim.fs.joinpath(current, name)
-                if kind == "file" and wanted[name] and vim.fn.filereadable(full) == 1 then
+                if (kind == "file" or kind == "link") and wanted[name] and vim.fn.filereadable(full) == 1 then
                     return full
                 end
                 if kind == "directory" then

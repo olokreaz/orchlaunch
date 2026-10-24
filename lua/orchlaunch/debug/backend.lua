@@ -110,7 +110,19 @@ function M.adapter_to_backend(req)
     if not selector or selector == "" then
         selector = req.kind
     end
-    if not selector or selector == "" or M.is_path(selector) then
+    if not selector or selector == "" then
+        return nil
+    end
+
+    -- An adapter path such as `/usr/bin/gdb` still identifies the debugger;
+    -- without this, it falls back to the default backend (lldb).
+    if M.is_path(selector) then
+        local base = vim.fs.basename(selector):lower()
+        for _, name in ipairs(order) do
+            if base:find(name, 1, true) then
+                return name
+            end
+        end
         return nil
     end
 
