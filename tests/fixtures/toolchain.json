@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/toolchain.schema.json",
+  "toolchains": [
+    {
+      "name": "Clang",
+      "type": "unix",
+      "cmake": "cmake",
+      "c": "clang",
+      "cxx": "clang++",
+      "debugger": "lldb",
+      "environment": { "CCACHE_DIR": "${workspace}/.ccache" }
+    },
+    {
+      "name": "GCC",
+      "type": "unix",
+      "cmake": "cmake",
+      "c": "gcc",
+      "cxx": "g++",
+      "debugger": "gdb"
+    }
+  ]
+}

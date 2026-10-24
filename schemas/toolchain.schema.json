@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/toolchain.schema.json",
+  "title": "OrchLaunch Toolchains",
+  "description": "Toolchain definitions for OrchLaunch. Each toolchain defines compiler paths and environment for CMake.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE support"
+    },
+    "toolchains": {
+      "type": "array",
+      "description": "List of toolchains",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique name of the toolchain"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["system", "unix", "msvc"],
+            "description": "Toolchain type: system (auto-detected), unix (GCC/Clang), or msvc (Microsoft Visual C++)."
+          },
+          "cmake": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path to the CMake executable for this toolchain."
+          },
+          "c": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path to the C compiler (e.g., gcc, clang, cl)."
+          },
+          "cxx": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path to the C++ compiler (e.g., g++, clang++, cl)."
+          },
+          "debugger": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Debug adapter to use: gdb or lldb."
+          },
+          "environment": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Additional environment variables for this toolchain. Supports ${workspace} and ${orch} variables."
+          }
+        },
+        "required": ["name", "type", "cmake", "c", "cxx", "debugger"],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": ["toolchains"]
+}

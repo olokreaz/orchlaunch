@@ -1,0 +1,223 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/run_configurations.schema.json",
+  "title": "OrchLaunch Run Configurations",
+  "description": "Run/debug configurations for OrchLaunch. Supports native, remote-debug, and compound configurations.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE support"
+    },
+    "configurations": {
+      "type": "array",
+      "description": "List of run/debug configurations",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/native"
+          },
+          {
+            "$ref": "#/$defs/remote-debug"
+          },
+          {
+            "$ref": "#/$defs/compound"
+          }
+        ]
+      }
+    }
+  },
+  "required": ["configurations"],
+  "$defs": {
+    "base-config": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique name of the configuration"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["native", "remote-debug", "compound"],
+          "description": "Type of the configuration"
+        },
+        "before": {
+          "$ref": "#/$defs/before"
+        }
+      },
+      "required": ["name", "type"],
+      "additionalProperties": true
+    },
+    "native": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base-config"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "native"
+            },
+            "target": {
+              "type": "string",
+              "description": "CMake target name or path to an executable. If omitted, only before-launch steps run."
+            },
+            "runtime": {
+              "type": "string",
+              "enum": ["executable", "static", "shared", "module", "object", "utility"],
+              "description": "CMake target kind (used when target is a CMake target name)."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Working directory for the process. Supports ${workspace} and ${orch} variables."
+            },
+            "args": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Command-line arguments passed to the program."
+            },
+            "inherit_env": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether to inherit the parent process environment."
+            },
+            "sudo": {
+              "type": "boolean",
+              "default": false,
+              "description": "Run the process with sudo (not compatible with console modes hidden/none)."
+            },
+            "environment": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Additional environment variables. Supports ${workspace} and ${orch} variables."
+            },
+            "console": {
+              "$ref": "#/$defs/console"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "remote-debug": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base-config"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "remote-debug"
+            },
+            "symbol": {
+              "type": "string",
+              "description": "Path to the local symbol file (executable with debug info)."
+            },
+            "connection": {
+              "type": "string",
+              "pattern": "^[^:]+:\\d+$",
+              "description": "Remote debugger connection as host:port."
+            },
+            "adapter": {
+              "type": "string",
+              "enum": ["gdb", "lldb"],
+              "description": "Debug adapter to use for the remote connection."
+            }
+          },
+          "required": ["connection"],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "compound": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base-config"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "compound"
+            },
+            "configurations": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string" },
+              "description": "Names of child configurations to run in sequence."
+            }
+          },
+          "required": ["configurations"],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "console": {
+      "type": "object",
+      "description": "Console/terminal settings for native configurations",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["embedded", "hidden", "none"],
+          "default": "embedded",
+          "description": "embedded = terminal in Neovim, hidden = background process with completion notification, none = no output shown."
+        },
+        "keep_open": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep the terminal buffer open after the process exits (embedded mode only)."
+        },
+        "clear_on_start": {
+          "type": "boolean",
+          "default": true,
+          "description": "Clear the terminal buffer before starting the process (embedded mode only)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "before": {
+      "type": "object",
+      "description": "Before-launch steps (run before the main configuration)",
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string", "enum": ["build", "install"] },
+              {
+                "type": "object",
+                "properties": {
+                  "type": { "const": "build" },
+                  "target": { "type": "string" }
+                },
+                "required": ["type"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": { "const": "install" },
+                  "target": { "type": "string" }
+                },
+                "required": ["type"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": { "const": "external" },
+                  "tool": { "type": "string", "minLength": 1 }
+                },
+                "required": ["type", "tool"]
+              }
+            ]
+          },
+          "description": "List of before-launch actions: build, install, or external tool."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

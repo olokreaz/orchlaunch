@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/run_configurations.schema.json",
+  "configurations": [
+    {
+      "name": "Game",
+      "type": "native",
+      "target": "game",
+      "runtime": "executable",
+      "cwd": "${workspace}/build",
+      "args": ["-dev", "-console"],
+      "console": { "mode": "embedded", "keep_open": true, "clear_on_start": true },
+      "before": { "tools": ["build", { "type": "external", "tool": "gen-assets" }] }
+    },
+    {
+      "name": "Server",
+      "type": "native",
+      "target": "server",
+      "cwd": "${workspace}",
+      "args": ["--port", "8080"],
+      "console": { "mode": "hidden" },
+      "inherit_env": true,
+      "environment": { "RUST_LOG": "debug" }
+    },
+    {
+      "name": "Attach to Server",
+      "type": "remote-debug",
+      "symbol": "server",
+      "connection": "localhost:1234",
+      "adapter": "lldb"
+    },
+    {
+      "name": "Full Stack",
+      "type": "compound",
+      "configurations": ["Game", "Server"]
+    }
+  ]
+}

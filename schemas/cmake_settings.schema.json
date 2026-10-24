@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/cmake_settings.schema.json",
+  "title": "OrchLaunch CMake Settings",
+  "description": "CMake project settings including profiles, presets, and build configuration.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE support"
+    },
+    "cmake": {
+      "description": "CMake settings container (preferred format)",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "active": {
+          "type": "string",
+          "description": "Name of the active CMake profile."
+        },
+        "source_dir": {
+          "type": "string",
+          "description": "Path to the CMake project directory (contains CMakeLists.txt). Supports ${workspace} and ${orch} variables."
+        },
+        "profiles": {
+          "type": "array",
+          "description": "List of CMake profiles",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Unique name of the profile"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["configure", "build"],
+                "description": "Profile kind: configure (for configure presets) or build (for build presets)."
+              },
+              "configure_preset": {
+                "type": "string",
+                "description": "Name of the CMake configure preset this profile wraps."
+              },
+              "build_preset": {
+                "type": "string",
+                "description": "Name of the CMake build preset this profile wraps."
+              },
+              "test_preset": {
+                "type": "string",
+                "description": "Name of the CMake test preset to use with this profile."
+              },
+              "toolchain": {
+                "type": "string",
+                "description": "Name of the toolchain to use with this profile."
+              },
+              "generator": {
+                "type": "string",
+                "description": "CMake generator (e.g., Ninja, Unix Makefiles)."
+              },
+              "build_type": {
+                "type": "string",
+                "description": "CMake build type (e.g., Debug, Release, RelWithDebInfo)."
+              },
+              "build_dir": {
+                "type": "string",
+                "description": "Build directory. Supports ${workspace} and ${orch} variables."
+              },
+              "install_dir": {
+                "type": "string",
+                "description": "Install directory. Supports ${workspace} and ${orch} variables."
+              },
+              "configure_args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Additional arguments passed to CMake configure step."
+              },
+              "build_args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Additional arguments passed to CMake build step."
+              },
+              "install_args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Additional arguments passed to CMake install step."
+              },
+              "definitions": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "description": "CMake cache variables (-D options)."
+              },
+              "environment": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "description": "Environment variables for CMake. Supports ${workspace} and ${orch} variables."
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "settings": {
+      "description": "Legacy flat CMake settings format (deprecated, kept for backward compatibility)",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "active": { "type": "string" },
+        "source_dir": { "type": "string" },
+        "profiles": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "toolchain": { "type": "string" },
+        "configure_preset": { "type": "string" },
+        "build_preset": { "type": "string" },
+        "test_preset": { "type": "string" },
+        "generator": { "type": "string" },
+        "build_type": { "type": "string" },
+        "build_dir": { "type": "string" },
+        "install_dir": { "type": "string" },
+        "configure_args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "build_args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "install_args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "definitions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "required": ["cmake"] },
+    { "required": ["settings"] },
+    { "required": [] }
+  ]
+}

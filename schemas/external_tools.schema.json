@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/external_tools.schema.json",
+  "title": "OrchLaunch External Tools",
+  "description": "External tool definitions for OrchLaunch. Tools can be referenced from before-launch steps or run directly.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE support"
+    },
+    "tools": {
+      "type": "array",
+      "description": "List of external tools",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique name of the tool"
+          },
+          "program": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path to the program to execute. Supports ${workspace} and ${orch} variables."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Working directory for the tool. Supports ${workspace} and ${orch} variables."
+          },
+          "args": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Command-line arguments passed to the program."
+          },
+          "inherit_env": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to inherit the parent process environment."
+          },
+          "sudo": {
+            "type": "boolean",
+            "default": false,
+            "description": "Run the tool with sudo."
+          },
+          "environment": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Additional environment variables. Supports ${workspace} and ${orch} variables."
+          }
+        },
+        "required": ["name", "program"],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": ["tools"]
+}

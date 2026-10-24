@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/cmake_settings.schema.json",
+  "cmake": {
+    "active": "Debug",
+    "source_dir": "${workspace}",
+    "profiles": [
+      {
+        "name": "Debug",
+        "kind": "configure",
+        "configure_preset": "debug",
+        "toolchain": "Clang",
+        "build_type": "Debug",
+        "build_dir": "${workspace}/build/debug",
+        "environment": { "CCACHE_DIR": "${workspace}/.ccache" }
+      },
+      {
+        "name": "Release",
+        "kind": "build",
+        "build_preset": "release",
+        "configure_preset": "release",
+        "toolchain": "Clang",
+        "build_type": "Release",
+        "build_dir": "${workspace}/build/release"
+      }
+    ]
+  }
+}
