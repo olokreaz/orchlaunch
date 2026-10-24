@@ -11,3 +11,7 @@ doc/tags
 .DS_Store
 .idea/
 .vscode/
+
+# Test artifacts
+tests/fixtures/
+schemas/

@@ -8,10 +8,14 @@
 local commands = require("orchlaunch.commands")
 local project = require("orchlaunch.project")
 local state = require("orchlaunch.state")
+local schemas = require("orchlaunch.schemas")
+local edit = require("orchlaunch.edit")
+local select = require("orchlaunch.select")
 
 local M = {}
 
 local autocmds_installed = false
+local ui_autocmds_installed = false
 
 --- Loads (or reloads) the `.orch` project that contains `root`.
 ---
@@ -97,6 +101,9 @@ end
 ---@class OrchSetupOptions
 ---@field root? string Workspace root to search for `.orch`.
 ---@field silent? boolean Do not warn when no project is found.
+---@field jsonls? boolean Enable automatic JSON Schema registration with jsonls (default: true).
+---@field write_schema_ref? boolean Write $schema reference to files on save (default: false).
+---@field ui? { backend?: "buffer" | "fibrous", edit?: table, virtual_text?: boolean }
 
 --- Registers commands and loads the project containing `opts.root`
 --- (defaults to the current directory).
@@ -106,6 +113,12 @@ function M.setup(opts)
     opts = opts or {}
     commands.register()
     install_autocmds()
+
+    -- Setup JSON Schema integration
+    schemas.setup(opts)
+
+    -- Setup buffer-based editing UI
+    edit.setup_autocmds()
 
     local loaded, load_err = M.load(opts.root)
     if not loaded and not opts.silent and not load_err then
@@ -128,9 +141,39 @@ function M.state()
     return state.get()
 end
 
---- Opens the Run/Debug configurations browser.
+--- Opens the Run/Debug configurations browser (uses configured UI backend).
 function M.open()
-    require("orchlaunch.ui.fibrous.browser").open()
+    local backend = "buffer"
+    local ok, cfg = pcall(function() return require("orchlaunch").config.ui end)
+    if ok and cfg and cfg.backend then
+        backend = cfg.backend
+    end
+
+    if backend == "fibrous" then
+        local ok, fibrous = pcall(require, "orchlaunch.ui.fibrous.browser")
+        if ok and fibrous then
+            fibrous.open()
+            return
+        end
+        vim.notify("[orchlaunch] fibrous not available, falling back to buffer UI", vim.log.levels.WARN)
+    end
+
+    -- Default: buffer-based browser using vim.ui.select
+    select.select_and_run({ mode = "run" })
+end
+
+--- Opens the buffer-based configuration editor.
+---@param file_type? "run_configurations" | "external_tools" | "toolchain" | "cmake_settings" | "breakpoints"
+---@param entry_name? string
+---@param opts? { window?: "split" | "vsplit" | "float" | "tab", fold_others?: boolean }
+function M.edit(file_type, entry_name, opts)
+    edit.open(file_type, entry_name, opts)
+end
+
+--- Creates a new configuration entry.
+---@param config_type? "native" | "remote-debug" | "compound" | "external_tool" | "toolchain" | "cmake_profile"
+function M.new(config_type)
+    edit.new(config_type)
 end
 
 ---@param name? string
@@ -198,6 +241,12 @@ function M.create_project(root)
     vim.notify(("[orchlaunch] %s .orch project at %s"):format(verb, loaded.root), vim.log.levels.INFO)
 
     return loaded
+end
+
+--- Returns schema check information for :OrchLaunchCheck.
+---@return table
+function M.check_schemas()
+    return schemas.check_info()
 end
 
 return M
