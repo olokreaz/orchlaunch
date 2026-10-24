@@ -2,7 +2,7 @@
 
 - Baseline: `e50c5c3` (`feat: add CMake actions, targets browser and toolchain environments`)
 - Audited HEAD: `e679a18` (`docs: add full OrchLaunch audit`)
-- Fixes below are implemented in the working tree on top of `e679a18`.
+- Fixes below are implemented in local commits `ad384de..7903cfd` on top of `e679a18`.
 - Date: 2026-10-23
 - Scope: `lua/orchlaunch/**`, CMake preset handling, run/debug dispatch, DAP
   backends, fibrous UI, persistence, breakpoints, integrations and tests.
