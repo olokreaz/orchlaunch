@@ -17,7 +17,8 @@ local autocmds_installed = false
 ---
 --- Returns nil and resets the current project when none is found.
 ---@param root? string
----@return OrchState?
+---@return OrchState? loaded
+---@return string? error
 function M.load(root)
     root = root or vim.fn.getcwd()
     local found, orch_dir = project.locate(root)
@@ -27,10 +28,20 @@ function M.load(root)
         return nil
     end
 
-    local loaded = state.setup(found, orch_dir)
-    pcall(function()
+    local ok, loaded = pcall(state.setup, found, orch_dir)
+    if not ok then
+        state.reset()
+        local message = tostring(loaded):gsub("^%[orchlaunch%]%s*", "")
+        state.report_error(message)
+        return nil, message
+    end
+
+    local breakpoints_ok, breakpoints_err = pcall(function()
         require("orchlaunch.breakpoints").load()
     end)
+    if not breakpoints_ok then
+        state.report_error(tostring(breakpoints_err))
+    end
     return loaded
 end
 
@@ -48,6 +59,29 @@ local function install_autocmds()
         callback = function()
             M.load(vim.fn.getcwd())
         end,
+    })
+
+    local function reload_if_changed()
+        if state.is_loaded() then
+            state.reload_if_changed()
+        end
+    end
+
+    vim.api.nvim_create_autocmd("BufWritePost", {
+        group = group,
+        callback = function(args)
+            if not state.is_loaded() then
+                return
+            end
+            if vim.fs.dirname(vim.fs.normalize(args.file)) == state.orch_dir() then
+                reload_if_changed()
+            end
+        end,
+    })
+
+    vim.api.nvim_create_autocmd({ "FocusGained", "FileChangedShellPost" }, {
+        group = group,
+        callback = reload_if_changed,
     })
 
     vim.api.nvim_create_autocmd({ "ColorScheme", "VimEnter" }, {
@@ -73,8 +107,8 @@ function M.setup(opts)
     commands.register()
     install_autocmds()
 
-    local loaded = M.load(opts.root)
-    if not loaded and not opts.silent then
+    local loaded, load_err = M.load(opts.root)
+    if not loaded and not opts.silent and not load_err then
         vim.notify("[orchlaunch] no .orch project found", vim.log.levels.WARN)
     end
 
@@ -139,14 +173,29 @@ end
 ---@return OrchState?
 function M.create_project(root)
     root = root or vim.fn.getcwd()
-    local created = project.create(root)
-    local loaded = state.setup(root)
-    pcall(function()
+    local created, create_err = project.create(root)
+    if created == nil then
+        state.report_error(create_err or "failed to create .orch project")
+        return nil
+    end
+
+    -- Pass the explicit `.orch` directory: `locate()` walks upwards and would
+    -- otherwise load the parent project when `root` is nested inside one.
+    local ok, loaded = pcall(state.setup, root, project.orch_dir(root))
+    if not ok then
+        state.report_error(tostring(loaded):gsub("^%[orchlaunch%]%s*", ""))
+        return nil
+    end
+
+    local breakpoints_ok, breakpoints_err = pcall(function()
         require("orchlaunch.breakpoints").load()
     end)
+    if not breakpoints_ok then
+        state.report_error(tostring(breakpoints_err))
+    end
 
     local verb = created and "created" or "loaded existing"
-    vim.notify(("[orchlaunch] %s .orch project at %s"):format(verb, root), vim.log.levels.INFO)
+    vim.notify(("[orchlaunch] %s .orch project at %s"):format(verb, loaded.root), vim.log.levels.INFO)
 
     return loaded
 end

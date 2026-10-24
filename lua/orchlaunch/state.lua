@@ -23,41 +23,121 @@ local function build_paths(orch_dir)
     }
 end
 
+local last_reported_error = nil
+
+--- Shows a load/save error once per identical message, so DirChanged and
+--- focus events do not turn one malformed file into a notification storm.
+---@param message string
+function M.report_error(message)
+    if last_reported_error == message then
+        return
+    end
+    last_reported_error = message
+    vim.notify("[orchlaunch] " .. message, vim.log.levels.ERROR)
+end
+
 ---@param path string
----@return OrchRunConfigurations
+---@return OrchRunConfigurations? data
+---@return string? error
 local function load_run_configurations(path)
-    local raw = config.load(path)
+    local raw, err = config.load(path)
+    if not raw then
+        return nil, err
+    end
     local list = raw.configurations or raw.configuration or {}
-    return { configurations = type(list) == "table" and list or {} }
+    if type(list) ~= "table" then
+        return nil, ("%s: `configurations` must be a list"):format(path)
+    end
+    for index, item in ipairs(list) do
+        if type(item) ~= "table" then
+            return nil, ("%s: configurations[%d] must be an object"):format(path, index)
+        end
+        if type(item.name) ~= "string" or item.name == "" then
+            return nil, ("%s: configurations[%d] requires a non-empty `name`"):format(path, index)
+        end
+    end
+    return { configurations = list }
 end
 
 ---@param path string
----@return OrchExternalToolsConfig
+---@return OrchExternalToolsConfig? data
+---@return string? error
 local function load_external_tools(path)
-    local raw = config.load(path)
+    local raw, err = config.load(path)
+    if not raw then
+        return nil, err
+    end
     local list = raw.tools or raw.tool or {}
-    return { tools = type(list) == "table" and list or {} }
+    if type(list) ~= "table" then
+        return nil, ("%s: `tools` must be a list"):format(path)
+    end
+    for index, item in ipairs(list) do
+        if type(item) ~= "table" then
+            return nil, ("%s: tools[%d] must be an object"):format(path, index)
+        end
+        if type(item.name) ~= "string" or item.name == "" then
+            return nil, ("%s: tools[%d] requires a non-empty `name`"):format(path, index)
+        end
+    end
+    return { tools = list }
 end
 
 ---@param path string
----@return OrchToolchainConfig
+---@return OrchToolchainConfig? data
+---@return string? error
 local function load_toolchains(path)
-    local raw = config.load(path)
+    local raw, err = config.load(path)
+    if not raw then
+        return nil, err
+    end
     local list = raw.toolchains or raw.toolchain or {}
-    return { toolchains = type(list) == "table" and list or {} }
+    if type(list) ~= "table" then
+        return nil, ("%s: `toolchains` must be a list"):format(path)
+    end
+    for index, item in ipairs(list) do
+        if type(item) ~= "table" then
+            return nil, ("%s: toolchains[%d] must be an object"):format(path, index)
+        end
+        if type(item.name) ~= "string" or item.name == "" then
+            return nil, ("%s: toolchains[%d] requires a non-empty `name`"):format(path, index)
+        end
+    end
+    return { toolchains = list }
 end
 
 ---@param path string
----@return OrchCMakeConfig
+---@return OrchCMakeConfig? data
+---@return string? error
 local function load_cmake_settings(path)
-    local raw = config.load(path)
+    local raw, err = config.load(path)
+    if not raw then
+        return nil, err
+    end
     local doc = raw.cmake or raw.settings or raw
-    if type(doc) ~= "table" then
-        return { profiles = {} }
+    if type(doc) ~= "table" or (vim.islist(doc) and #doc > 0) then
+        return nil, ("%s: expected a CMake settings object"):format(path)
+    end
+    if doc.active ~= nil and type(doc.active) ~= "string" then
+        return nil, ("%s: `active` must be a string"):format(path)
+    end
+    if doc.source_dir ~= nil and type(doc.source_dir) ~= "string" then
+        return nil, ("%s: `source_dir` must be a string"):format(path)
     end
 
-    -- New format: a document holding `active`, `source_dir` and `profiles`.
-    if type(doc.profiles) == "table" then
+    if doc.profiles ~= nil then
+        -- Empty arrays decode as `{}` through the JSON layer, so an empty
+        -- table is accepted as an empty list. Non-empty maps are rejected.
+        if type(doc.profiles) ~= "table" or (#doc.profiles > 0 and not vim.islist(doc.profiles)) then
+            return nil, ("%s: `profiles` must be a list"):format(path)
+        end
+        for index, profile in ipairs(doc.profiles) do
+            if type(profile) ~= "table" then
+                return nil, ("%s: profiles[%d] must be an object"):format(path, index)
+            end
+            if type(profile.name) ~= "string" or profile.name == "" then
+                return nil, ("%s: profiles[%d] requires a non-empty `name`"):format(path, index)
+            end
+        end
         return { active = doc.active, source_dir = doc.source_dir, profiles = doc.profiles }
     end
 
@@ -81,11 +161,133 @@ local function load_cmake_settings(path)
 end
 
 --- @param path string
---- @return table[]
+--- @return table[]? data
+--- @return string? error
 local function load_breakpoints(path)
-    local raw = config.load(path)
+    local raw, err = config.load(path)
+    if not raw then
+        return nil, err
+    end
     local list = raw.breakpoints or {}
-    return type(list) == "table" and list or {}
+    if type(list) ~= "table" then
+        return nil, ("%s: `breakpoints` must be a list"):format(path)
+    end
+    for index, record in ipairs(list) do
+        if type(record) ~= "table" then
+            return nil, ("%s: breakpoints[%d] must be an object"):format(path, index)
+        end
+        if type(record.file) ~= "string" or record.file == "" then
+            return nil, ("%s: breakpoints[%d] requires `file`"):format(path, index)
+        end
+        if type(record.line) ~= "number" then
+            return nil, ("%s: breakpoints[%d] requires a numeric `line`"):format(path, index)
+        end
+    end
+    return list
+end
+
+--- Reads a file verbatim. `false` distinguishes "missing" from an empty file.
+---@param path string
+---@return string|false
+local function read_disk(path)
+    if vim.fn.filereadable(path) == 0 then
+        return false
+    end
+    local file = io.open(path, "r")
+    if not file then
+        return false
+    end
+    local text = file:read("*a")
+    file:close()
+    return text or ""
+end
+
+---@param path string
+---@param text string|false
+---@return table
+local function decode_document(path, text)
+    if type(text) ~= "string" or text:match("^%s*$") then
+        return {}
+    end
+    local ok, decoded = pcall(vim.json.decode, text)
+    if not ok or type(decoded) ~= "table" or (vim.islist(decoded) and #decoded > 0) then
+        -- The typed loaders already returned an error for this file; keep an
+        -- empty document rather than trying to round-trip a malformed shape.
+        return {}
+    end
+    return decoded
+end
+
+---@param a string|false
+---@param b table
+---@return boolean
+local function semantically_equal(a, b)
+    if type(a) ~= "string" or a:match("^%s*$") then
+        return next(b) == nil
+    end
+    local ok, decoded = pcall(vim.json.decode, a)
+    return ok and vim.deep_equal(decoded, b)
+end
+
+--- Builds a complete replacement state from disk.
+---@param root string
+---@param orch_dir string
+---@return OrchState? loaded
+---@return string? error
+local function load_state(root, orch_dir)
+    local paths = build_paths(orch_dir)
+    local run_configurations, err = load_run_configurations(paths.run_configurations)
+    if not run_configurations then
+        return nil, err
+    end
+    local external_tools
+    external_tools, err = load_external_tools(paths.external_tools)
+    if not external_tools then
+        return nil, err
+    end
+    local toolchains
+    toolchains, err = load_toolchains(paths.toolchain)
+    if not toolchains then
+        return nil, err
+    end
+    local cmake
+    cmake, err = load_cmake_settings(paths.cmake_settings)
+    if not cmake then
+        return nil, err
+    end
+    local breakpoints
+    breakpoints, err = load_breakpoints(paths.breakpoints)
+    if not breakpoints then
+        return nil, err
+    end
+
+    local documents, last_seen = {}, {}
+    for _, key in ipairs({
+        "run_configurations",
+        "external_tools",
+        "toolchain",
+        "cmake_settings",
+        "breakpoints",
+    }) do
+        local path = paths[key]
+        local text = read_disk(path)
+        last_seen[path] = text
+        documents[path] = decode_document(path, text)
+    end
+
+    return {
+        root = root,
+        orch_dir = orch_dir,
+        paths = paths,
+        run_configurations = run_configurations,
+        external_tools = external_tools,
+        toolchains = toolchains,
+        cmake = cmake,
+        breakpoints = breakpoints,
+        runtime = {},
+        documents = documents,
+        last_seen = last_seen,
+    }
 end
 
 ---@param list table[]
@@ -170,20 +372,12 @@ function M.setup(root, orch_dir)
     end
     assert(found and orch_dir, "[orchlaunch] no .orch project found")
 
-    local paths = build_paths(orch_dir)
+    local loaded, err = load_state(found, orch_dir)
+    if not loaded then
+        error(("[orchlaunch] %s"):format(err), 0)
+    end
 
-    state = {
-        root = found,
-        orch_dir = orch_dir,
-        paths = paths,
-        run_configurations = load_run_configurations(paths.run_configurations),
-        external_tools = load_external_tools(paths.external_tools),
-        toolchains = load_toolchains(paths.toolchain),
-        cmake = load_cmake_settings(paths.cmake_settings),
-        breakpoints = load_breakpoints(paths.breakpoints),
-        runtime = {},
-    }
-
+    state = loaded
     return state
 end
 
@@ -381,10 +575,21 @@ function M.sync_cmake_profiles()
         return name
     end
 
+    local function find_imported(kind, preset_name)
+        for _, profile in ipairs(doc.profiles) do
+            local key = kind == "build" and "build_preset" or "configure_preset"
+            if profile.kind == kind and profile[key] == preset_name then
+                return profile
+            end
+        end
+        return nil
+    end
+
     for _, preset in ipairs(presets.visible(discovered, "configure")) do
-        if not find_by_name(doc.profiles, preset.name) then
+        if not find_imported("configure", preset.name) then
+            local existing = find_by_name(doc.profiles, preset.name)
             doc.profiles[#doc.profiles + 1] = {
-                name = preset.name,
+                name = existing and free_name(preset.name) or preset.name,
                 kind = "configure",
                 configure_preset = preset.name,
             }
@@ -393,16 +598,20 @@ function M.sync_cmake_profiles()
     end
 
     for _, preset in ipairs(presets.visible(discovered, "build")) do
-        local existing = find_by_name(doc.profiles, preset.name)
-        if not (existing and existing.build_preset == preset.name) then
-            local resolved = presets.resolve(discovered, "build", preset.name) or {}
-            doc.profiles[#doc.profiles + 1] = {
-                name = existing and free_name(preset.name) or preset.name,
-                kind = "build",
-                configure_preset = resolved.configurePreset,
-                build_preset = preset.name,
-            }
-            added = added + 1
+        if not find_imported("build", preset.name) then
+            local resolved, err = presets.resolve(discovered, "build", preset.name)
+            if err then
+                M.report_error(("CMake preset %q: %s"):format(preset.name, err))
+            else
+                local existing = find_by_name(doc.profiles, preset.name)
+                doc.profiles[#doc.profiles + 1] = {
+                    name = existing and free_name(preset.name) or preset.name,
+                    kind = "build",
+                    configure_preset = resolved and resolved.configurePreset,
+                    build_preset = preset.name,
+                }
+                added = added + 1
+            end
         end
     end
 
@@ -515,13 +724,27 @@ end
 ---@param value OrchRunConfiguration
 ---@return OrchRunConfiguration
 function M.update_configuration(name, value)
-    return update_named(M.run_configurations(), "configurations", name, value)
+    local updated = update_named(M.run_configurations(), "configurations", name, value)
+    local root = M.root()
+    local active = require("orchlaunch.active")
+    if active.get(root) == name then
+        active.set(root, updated.name)
+    end
+    return updated
 end
 
 ---@param name string
 ---@return boolean
 function M.remove_configuration(name)
-    return remove_named(M.run_configurations(), "configurations", name)
+    local removed = remove_named(M.run_configurations(), "configurations", name)
+    if removed then
+        local root = M.root()
+        local active = require("orchlaunch.active")
+        if active.get(root) == name then
+            active.set(root, nil)
+        end
+    end
+    return removed
 end
 
 ---@param value OrchExternalTool
@@ -588,31 +811,150 @@ end
 -- Persistence
 -- ============================================================================
 
----@return boolean
+---@param current OrchState
+---@param loaded OrchState
+local function replace_loaded(current, loaded)
+    current.run_configurations = loaded.run_configurations
+    current.external_tools = loaded.external_tools
+    current.toolchains = loaded.toolchains
+    current.cmake = loaded.cmake
+    current.breakpoints = loaded.breakpoints
+    current.documents = loaded.documents
+    current.last_seen = loaded.last_seen
+    current.runtime = {}
+end
+
+--- Builds the five on-disk documents from the current state while preserving
+--- unknown top-level keys (including `$schema`) from the last load.
+---@param current OrchState
+---@return table<string, table>
+local function build_documents(current)
+    local paths = current.paths
+    local documents = {}
+
+    local run = vim.deepcopy(current.documents[paths.run_configurations] or {})
+    run.configurations = current.run_configurations.configurations
+    documents[paths.run_configurations] = run
+
+    local tools = vim.deepcopy(current.documents[paths.external_tools] or {})
+    tools.tools = current.external_tools.tools
+    documents[paths.external_tools] = tools
+
+    local toolchains = vim.deepcopy(current.documents[paths.toolchain] or {})
+    toolchains.toolchains = current.toolchains.toolchains
+    documents[paths.toolchain] = toolchains
+
+    local cmake = vim.deepcopy(current.documents[paths.cmake_settings] or {})
+    local nested
+    if type(cmake.cmake) == "table" then
+        nested = cmake.cmake
+    elseif type(cmake.settings) == "table" then
+        nested = cmake.settings
+    else
+        nested = {}
+    end
+    nested.active = current.cmake.active
+    nested.source_dir = current.cmake.source_dir
+    nested.profiles = current.cmake.profiles
+    cmake.cmake = nested
+    documents[paths.cmake_settings] = cmake
+
+    local breakpoints = vim.deepcopy(current.documents[paths.breakpoints] or {})
+    breakpoints.breakpoints = current.breakpoints or {}
+    documents[paths.breakpoints] = breakpoints
+
+    return documents
+end
+
+---@return boolean ok
+---@return string? error
 function M.save()
     local current = M.get()
+    local documents = build_documents(current)
+    local paths = {
+        current.paths.run_configurations,
+        current.paths.external_tools,
+        current.paths.toolchain,
+        current.paths.cmake_settings,
+        current.paths.breakpoints,
+    }
 
-    config.save(current.paths.run_configurations, current.run_configurations)
-    config.save(current.paths.external_tools, current.external_tools)
-    config.save(current.paths.toolchain, current.toolchains)
-    config.save(current.paths.cmake_settings, { cmake = current.cmake })
-    config.save(current.paths.breakpoints, { breakpoints = current.breakpoints or {} })
+    -- Refuse to overwrite a file that changed since the last load/save. The
+    -- state remains untouched so an external hand edit is never lost.
+    for _, path in ipairs(paths) do
+        local disk = read_disk(path)
+        if current.last_seen[path] ~= disk then
+            local err = ("%s changed on disk; reload the project before saving"):format(path)
+            M.report_error(err)
+            return false, err
+        end
+    end
 
+    for _, path in ipairs(paths) do
+        local document = documents[path]
+        local disk = current.last_seen[path]
+        local text = config.stringify(document)
+
+        if not semantically_equal(disk, document) then
+            local ok, err = config.save(path, document)
+            if not ok then
+                M.report_error(err)
+                return false, err
+            end
+            current.last_seen[path] = text
+        end
+        current.documents[path] = document
+    end
+
+    last_reported_error = nil
     return true
 end
 
+--- Reloads every document and replaces the in-memory state only when all of
+--- them are valid. A malformed file therefore leaves the old state intact.
 ---@return OrchState
 function M.reload()
     local current = M.get()
+    local loaded, err = load_state(current.root, current.orch_dir)
+    if not loaded then
+        error(("[orchlaunch] %s"):format(err), 0)
+    end
 
-    current.run_configurations = load_run_configurations(current.paths.run_configurations)
-    current.external_tools = load_external_tools(current.paths.external_tools)
-    current.toolchains = load_toolchains(current.paths.toolchain)
-    current.cmake = load_cmake_settings(current.paths.cmake_settings)
-    current.breakpoints = load_breakpoints(current.paths.breakpoints)
-    current.runtime = {}
-
+    replace_loaded(current, loaded)
+    last_reported_error = nil
     return current
+end
+
+--- Reloads only when one of the `.orch` documents changed on disk.
+--- Returns true when a reload happened.
+---@return boolean reloaded
+function M.reload_if_changed()
+    if not state then
+        return false
+    end
+
+    local changed = false
+    for _, key in ipairs({ "run_configurations", "external_tools", "toolchain", "cmake_settings", "breakpoints" }) do
+        local path = state.paths[key]
+        if read_disk(path) ~= state.last_seen[path] then
+            changed = true
+            break
+        end
+    end
+    if not changed then
+        return false
+    end
+
+    local loaded, err = load_state(state.root, state.orch_dir)
+    if not loaded then
+        M.report_error(err)
+        return false
+    end
+
+    replace_loaded(state, loaded)
+    last_reported_error = nil
+    vim.notify("[orchlaunch] reloaded .orch after an external change", vim.log.levels.INFO)
+    return true
 end
 
 -- ============================================================================

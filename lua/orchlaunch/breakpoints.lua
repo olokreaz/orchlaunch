@@ -85,25 +85,29 @@ end
 --- @param opts? { condition?: string, log_message?: string, hit_condition?: string }
 --- @param bufnr integer
 --- @param lnum integer
+--- @return boolean ok false when nvim-dap is not available
 function M.set(opts, bufnr, lnum)
     local bp = get_bp()
     if not bp then
-        return
+        return false
     end
     bp.set(opts or {}, bufnr, lnum)
     M.persist()
+    return true
 end
 
 --- @param opts? { condition?: string, log_message?: string, hit_condition?: string }
 --- @param bufnr integer
 --- @param lnum integer
+--- @return boolean ok false when nvim-dap is not available
 function M.toggle(opts, bufnr, lnum)
     local bp = get_bp()
     if not bp then
-        return
+        return false
     end
     bp.toggle(opts or {}, bufnr, lnum)
     M.persist()
+    return true
 end
 
 --- @param bufnr integer
@@ -119,12 +123,25 @@ function M.remove(bufnr, lnum)
     return removed
 end
 
+--- @return boolean ok false when nvim-dap is not available
 function M.clear()
+    local bp = get_bp()
+    if not bp then
+        return false
+    end
+    bp.clear()
+    M.persist()
+    return true
+end
+
+--- Removes every breakpoint from nvim-dap without touching the persisted
+--- project copy. Used when switching projects or before `load()` re-applies a
+--- different project's breakpoints.
+function M.clear_live()
     local bp = get_bp()
     if bp then
         bp.clear()
     end
-    M.persist()
 end
 
 -- ============================================================================
@@ -268,7 +285,10 @@ function M.persist()
     local state = get_state()
     if state then
         state.breakpoints = records
-        require("orchlaunch.config").save(state.paths.breakpoints, { breakpoints = records })
+        local ok, err = require("orchlaunch.state").save()
+        if not ok then
+            vim.notify(("[orchlaunch] %s"):format(err), vim.log.levels.ERROR)
+        end
     end
 
     return records
@@ -282,6 +302,10 @@ function M.load()
     if not bp or not state then
         return 0
     end
+
+    -- The same buffer number can survive a project switch, so remove the old
+    -- project's live breakpoints before applying this project's records.
+    M.clear_live()
 
     local applied = 0
     for _, record in ipairs(state.breakpoints or {}) do

@@ -121,25 +121,37 @@ end
 
 --- Parses a JSON file. Missing (or blank) files yield an empty table.
 ---@param path string
----@return table
+---@return table? data
+---@return string? error
 function M.load(path)
     if vim.fn.filereadable(path) == 0 then
         return {}
     end
 
-    local file = assert(io.open(path, "r"), ("[orchlaunch] cannot open %s"):format(path))
-    local content = file:read("*a")
+    local file, open_err = io.open(path, "r")
+    if not file then
+        return nil, ("cannot open %s: %s"):format(path, open_err or "unknown error")
+    end
+    local content, read_err = file:read("*a")
     file:close()
+    if content == nil then
+        return nil, ("cannot read %s: %s"):format(path, read_err or "unknown error")
+    end
 
     if content:match("^%s*$") then
         return {}
     end
 
     local ok, data = pcall(vim.json.decode, content)
-    assert(ok, ("[orchlaunch] failed to parse %s: %s"):format(path, tostring(data)))
+    if not ok then
+        return nil, ("failed to parse %s: %s"):format(path, tostring(data))
+    end
 
     if type(data) ~= "table" then
-        return {}
+        return nil, ("%s must contain a JSON object"):format(path)
+    end
+    if vim.islist(data) and #data > 0 then
+        return nil, ("%s must contain a JSON object, not a list"):format(path)
     end
 
     return data
@@ -152,19 +164,51 @@ function M.stringify(data)
     return encode_json(data, "") .. "\n"
 end
 
---- Writes a Lua table to a JSON file.
+--- Writes a Lua table atomically to a JSON file.
+---
+--- The document is written to a sibling temporary file and renamed over the
+--- destination, so a crash or a full disk cannot truncate the existing file.
 ---@param path string
 ---@param data table
----@return boolean
+---@return boolean ok
+---@return string? error
 function M.save(path, data)
     local parent = vim.fs.dirname(path)
     if parent and parent ~= "" and vim.fn.isdirectory(parent) == 0 then
         vim.fn.mkdir(parent, "p")
+        if vim.fn.isdirectory(parent) == 0 then
+            return false, ("cannot create directory %s"):format(parent)
+        end
     end
 
-    local file = assert(io.open(path, "w"), ("[orchlaunch] cannot write %s"):format(path))
-    file:write(M.stringify(data))
-    file:close()
+    local tmp = ("%s.tmp.%d.%d"):format(path, vim.fn.getpid(), vim.uv.hrtime())
+    local file, open_err = io.open(tmp, "wb")
+    if not file then
+        return false, ("cannot write %s: %s"):format(path, open_err or "unknown error")
+    end
+
+    local write_ok, write_err = file:write(M.stringify(data))
+    local flush_ok, flush_err = file:flush()
+    local close_ok, close_err = file:close()
+    if not (write_ok and flush_ok and close_ok) then
+        os.remove(tmp)
+        return false,
+            ("cannot write %s: %s"):format(path, write_err or flush_err or close_err or "unknown error")
+    end
+
+    local renamed, rename_err = vim.uv.fs_rename(tmp, path)
+    if not renamed then
+        -- Windows cannot replace an existing file with rename. The fallback is
+        -- not atomic, but it is still better than leaving the destination
+        -- truncated and is only used on that platform.
+        if os.remove(path) then
+            renamed, rename_err = vim.uv.fs_rename(tmp, path)
+        end
+    end
+    if not renamed then
+        os.remove(tmp)
+        return false, ("cannot replace %s: %s"):format(path, rename_err or "unknown error")
+    end
 
     return true
 end
@@ -241,16 +285,53 @@ function M.to_lua(value)
 end
 
 --- Parses a Lua literal (optionally prefixed with `return`).
+---
+--- The scratch editor is expected to contain data, but the text is still
+--- executed. Run it in an empty environment with an instruction budget so a
+--- pasted `os.execute(...)` or an accidental infinite loop cannot reach the
+--- editor or freeze it.
 ---@param text string
 ---@return table
 function M.from_lua(text)
-    local loader = loadstring or load
-    local chunk, err = loader(text, "orchlaunch-profile")
+    local env = {}
+    local chunk, err
+    if setfenv and loadstring then
+        chunk, err = loadstring(text, "orchlaunch-profile")
+        if chunk then
+            setfenv(chunk, env)
+        end
+    else
+        chunk, err = load(text, "orchlaunch-profile", "t", env)
+    end
     assert(chunk, ("[orchlaunch] invalid Lua: %s"):format(err or "parse error"))
 
+    -- LuaJIT may compile the untrusted loop and bypass count hooks, so disable
+    -- JIT for the duration of the evaluation and restore its previous state.
+    local jit = rawget(_G, "jit")
+    local restore_jit = false
+    if type(jit) == "table" and type(jit.status) == "function" then
+        local jit_ok, jit_on = pcall(jit.status)
+        if jit_ok and jit_on and type(jit.off) == "function" then
+            restore_jit = pcall(jit.off)
+        end
+    end
+
+    local steps = 0
+    debug.sethook(function()
+        steps = steps + 1
+        if steps > 100000 then
+            error("profile exceeds the instruction budget", 0)
+        end
+    end, "", 1000)
+
     local ok, value = pcall(chunk)
+    debug.sethook()
+    if restore_jit and type(jit.on) == "function" then
+        pcall(jit.on)
+    end
     assert(ok, ("[orchlaunch] invalid Lua: %s"):format(value))
     assert(type(value) == "table", "[orchlaunch] profile must be a Lua table")
+    assert(not (vim.islist(value) and #value > 0), "[orchlaunch] profile must be a Lua table, not a list")
 
     return value
 end

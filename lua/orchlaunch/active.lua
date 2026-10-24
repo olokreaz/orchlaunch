@@ -4,6 +4,8 @@
 -- so it is never written into `.orch`. It is persisted in Neovim's state
 -- directory, keyed by workspace root.
 
+local config = require("orchlaunch.config")
+
 local M = {}
 
 --- @return string
@@ -13,40 +15,31 @@ end
 
 --- @return table<string, string>
 local function read_all()
-    local path = store_path()
-    if vim.fn.filereadable(path) == 0 then
+    local data, err = config.load(store_path())
+    if not data then
+        vim.notify(("[orchlaunch] %s"):format(err), vim.log.levels.WARN)
         return {}
     end
 
-    local file = io.open(path, "r")
-    if not file then
-        return {}
-    end
-    local content = file:read("*a")
-    file:close()
-
-    local ok, decoded = pcall(vim.json.decode, content)
-    if not ok or type(decoded) ~= "table" then
-        return {}
+    for root, name in pairs(data) do
+        if type(root) ~= "string" or type(name) ~= "string" then
+            vim.notify("[orchlaunch] active.json contains invalid entries", vim.log.levels.WARN)
+            return {}
+        end
     end
 
-    return decoded
+    return data
 end
 
 --- @param data table<string, string>
+--- @return boolean ok
+--- @return string? error
 local function write_all(data)
-    local path = store_path()
-    local dir = vim.fs.dirname(path)
-    if dir and vim.fn.isdirectory(dir) == 0 then
-        vim.fn.mkdir(dir, "p")
+    local ok, err = config.save(store_path(), data)
+    if not ok then
+        vim.notify(("[orchlaunch] %s"):format(err), vim.log.levels.ERROR)
     end
-
-    local file = io.open(path, "w")
-    if not file then
-        return
-    end
-    file:write(vim.json.encode(data))
-    file:close()
+    return ok, err
 end
 
 --- Returns the active configuration name for `root`.
@@ -59,10 +52,15 @@ end
 --- Sets (or clears, when `name` is nil) the active configuration for `root`.
 ---@param root string
 ---@param name? string
+---@return boolean ok
+---@return string? error
 function M.set(root, name)
+    if name ~= nil and type(name) ~= "string" then
+        return false, "active configuration name must be a string"
+    end
     local data = read_all()
     data[root] = name
-    write_all(data)
+    return write_all(data)
 end
 
 return M
