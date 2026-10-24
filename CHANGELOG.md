@@ -7,52 +7,67 @@ tagged yet; the entries below describe the current, unreleased state.
 
 ### Added
 
-- Run/Debug configurations (`native`, `remote-debug`, `compound`), toolchains,
-  external tools and before-launch steps (build / install / external).
-- CMake integration: `CMakePresets.json` import and resolution, profiles,
-  CMake File API target discovery and automatic run configurations for every
-  target (executables, static/shared/module/object libraries, custom targets).
-  Executables set `target`; other kinds have an empty executable and record
-  their `runtime` instead, and all configurations build their own target before
-  launch by default (CLion style); non-executable configurations run only those
-  build steps. Configurations created by hand before discovery are
-  preserved, and new ones are saved immediately.
-- Native debugging through nvim-dap with two selectable backends: LLDB
-  (`lldb-dap`/`lldb-vscode`) and GDB (`gdb --interpreter=dap`), including
-  remote attach over `host:port`.
-- Debugger UI: `:OrchLaunchDebugger` uses nvim-dap-view or nvim-dap-ui when
-  installed; the fibrous panel (threads, frames, scopes, variables, stepping)
-  remains as a fallback.
-- Build diagnostics are written to the standard quickfix list, ready for
-  trouble.nvim, snacks.nvim or `:copen`.
-- CMake actions: `:OrchLaunchConfigure`, `:OrchLaunchBuild [target]`,
-  `:OrchLaunchRebuild [target]`, `:OrchLaunchClean`, `:OrchLaunchInstall` and
-  `:OrchLaunchTest`.
-- CMake Targets browser (`:OrchLaunchTargets`, `t` in the run browser) with
-  artifact details and build/run/debug/edit-config actions.
-- Toolchain `environment` is merged into CMake configure/build/install/test and
-  run/debug environments; the toolchain `debugger` is the default adapter for
-  native configurations.
-- Manual CMake profiles expose a **Test preset** field driving
-  `:OrchLaunchTest`.
-- Breakpoints with conditions and log points, managed from a panel and
-  persisted per project in `.orch/breakpoints.json`.
-- `:OrchLaunchCheck` environment preflight (CMake, compilers, debug adapters,
-  nvim-dap and fibrous).
-- Complete fibrous.nvim UI: browser, editors, list dialogs, debugger and
-  breakpoints panels, plus continuous `Tab`/`Shift+Tab` field navigation with a
-  letter flash-jump (`s`).
+- **JSON Schema & Language Server Integration** — Ships draft-07 schemas for all
+  `.orch/*.json` files (`schemas/`). Auto-registers with `jsonls`
+  (vscode-json-language-server) on `LspAttach` for autocompletion, hover docs,
+  and structural validation. Optional `$schema` reference written on save
+  (`write_schema_ref` option). Manual setup instructions for nvim-lspconfig
+  and `vim.lsp.config`.
+- **Buffer-based Editing UI (New Default)** — Configuration files are edited as
+  plain JSON buffers with syntax highlighting, folding, undo, and all user
+  plugins. New commands:
+  - `:OrchLaunchEdit [configs|tools|toolchain|cmake|breakpoints]` — open file,
+    optionally jump to a specific entry.
+  - `:OrchLaunchNew [native|remote-debug|compound|external_tool|toolchain|cmake_profile]` — create new entry with defaults.
+  - `:OrchLaunchRunHere` — run the configuration under cursor in `run_configurations.json`.
+  - Selection via `vim.ui.select` (telescope/snacks/fzf-lua/dressing):
+    `:OrchLaunchSelectConfig`, `:OrchLaunchSelectDebug`,
+    `:OrchLaunchSelectTarget`, `:OrchLaunchSelectToolchain`,
+    `:OrchLaunchSelectProfile`, `:OrchLaunchSelectPreset`,
+    `:OrchLaunchSelectTool`.
+- **Semantic Validation** — `vim.diagnostic` integration for rules JSON Schema
+  cannot express: unknown CMake targets, missing toolchains/profiles/tools,
+  compound cycles, duplicate names, sudo with hidden/none console, empty native
+  configurations. Debounced on `TextChanged`/`InsertLeave`, cleared on
+  `BufDelete`.
+- **Virtual Text** — in `run_configurations.json`, native configurations show
+  the resolved executable path as virtual text at end of line (toggle with
+  `ui.virtual_text`).
+- **UI Backend Selection** — `setup({ ui = { backend = "buffer" } })` (default)
+  or `"fibrous"`. Fibrous becomes optional; falls back to buffer UI with a
+  warning if fibrous is missing. Fibrous code is lazy-loaded.
+- **JSON Schema Drift Test** — `tests/schema_check.lua` validates examples
+  against schemas and checks enum consistency between schemas and code.
+- `:OrchLaunchCheck` now reports jsonls availability and schema registration status.
 
 ### Changed
 
-- The UI now runs exclusively on fibrous.nvim; the previous Volt engine, its
-  fallback paths and its tests were removed. `fibrous.nvim` is a required
-  dependency.
-- Debug sessions set `switchbuf=useopen,usetab` by default so nvim-dap no longer
-  replaces the debugger panel with the stopped source file. Override with
-  `vim.g.orchlaunch_dap_switchbuf`.
-- `debug.start` now refuses to start when the selected adapter is not installed
-  and reports the missing backend.
+- **Default UI backend is now "buffer"** — fibrous is optional. The classic
+  fibrous UI is still available via `setup({ ui = { backend = "fibrous" } })`
+  or commands like `:OrchLaunchEditConfig`.
+- **fibrous.nvim is now optional** — the plugin works without it. The fibrous
+  UI code is lazy-loaded on demand.
+- `:OrchLaunchEdit` now opens JSON buffers with `vim.ui.select` for entry
+  selection instead of fibrous forms.
+- `:OrchLaunchCheck` reports jsonls presence and schema registration.
+
+### Removed
+
+- Fibrous is no longer a required dependency (removed from `dependencies` in
+  installation example).
+
+### Testing
+
+- Added `tests/schema_check.lua` — validates example configs against schemas
+  and checks enum drift between schemas and code (skips if jsonschema not
+  installed).
+- Added `tests/hardening_test.lua` — regression tests for persistence,
+  sandboxing, async cancel, and unique augroups.
+
+### Fixed
+
+- Fixed various issues with schema enum drift detection and validation
+  position finding.
 
 ### Testing
 
@@ -60,3 +75,4 @@ tagged yet; the entries below describe the current, unreleased state.
   `lldb-server`, conditional breakpoints, debugger controls and the debugger
   panel. No mocked DAP layer remains.
 - Added a tmux-driven functional suite for the fibrous form focus/navigation.
+- All existing tests pass with the new buffer-based UI.

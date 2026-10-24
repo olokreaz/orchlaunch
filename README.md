@@ -50,6 +50,10 @@ target discovery — driven from JSON files inside a `.orch` project.
   viewer.
 - **Run/Debug browser** — a [fibrous.nvim](https://github.com/mbrea-c/fibrous.nvim)-based UI
   for the list, details and every manager, backed by plain JSON on disk.
+  **Now optional** — the new default UI uses plain JSON buffers with `vim.ui.select`.
+- **JSON Schema & validation** — autocompletion, hover docs, and semantic
+  validation (unknown targets, missing toolchains, cycles, etc.) via
+  `jsonls` (vscode-json-language-server).
 - **Active configuration** — remembered per project (outside `.orch`).
 
 ## Debugging
@@ -73,10 +77,12 @@ If nvim-dap is not installed, OrchLaunch notifies accordingly.
 ## Requirements
 
 - Neovim ≥ 0.10 (uses `vim.system`, `vim.json`, `vim.fs`)
-- [fibrous.nvim](https://github.com/mbrea-c/fibrous.nvim) (required — the whole UI)
+- [fibrous.nvim](https://github.com/mbrea-c/fibrous.nvim) (optional — for the classic UI)
 - CMake on `PATH` (or configured per toolchain) for the CMake features
 - Optional: [nvim-dap](https://github.com/mfussenegger/nvim-dap) plus `lldb-dap`
   or `gdb` for debugging
+- Optional: [vscode-langservers-extracted](https://github.com/hrsh7th/vscode-langservers-extracted)
+  for JSON Schema autocompletion and validation (`jsonls`)
 
 ## Installation
 
@@ -86,7 +92,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
   "olokreaz/orchlauncher.git",
   dependencies = {
-    "mbrea-c/fibrous.nvim",
+    "mbrea-c/fibrous.nvim",  -- optional
   },
   config = function()
     require("orchlaunch").setup({ silent = true })
@@ -101,6 +107,16 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 require("orchlaunch").setup({
   root = nil,     -- workspace root to search for .orch (default: cwd)
   silent = true,  -- don't warn when no .orch project is found
+  jsonls = true,  -- auto-register JSON Schemas with jsonls (default: true)
+  write_schema_ref = false, -- add "$schema" to files on save (default: false)
+  ui = {
+    backend = "buffer",  -- "buffer" (default) or "fibrous"
+    edit = {
+      window = "split",  -- "split" | "vsplit" | "float" | "tab"
+      fold_others = false,
+    },
+    virtual_text = true, -- show resolved executable path in run_configurations.json
+  },
 })
 ```
 
@@ -111,7 +127,7 @@ require("orchlaunch").setup({
 :OrchLaunch                       " open the Run/Debug browser
 ```
 
-Then, in the browser:
+Then, in the browser (fibrous backend) or via `:OrchLaunchSelectConfig` (buffer backend):
 
 1. **Toolchains…** — add a toolchain (compiler/cmake/debugger).
 2. **CMake…** — create/select a CMake profile (or **Import** presets).
@@ -130,8 +146,71 @@ committed:
 ├── run_configurations.json
 ├── external_tools.json
 ├── toolchain.json
-└── cmake_settings.json
+├── cmake_settings.json
+└── breakpoints.json
 ```
+
+## JSON Schema & Language Server Integration
+
+OrchLaunch ships JSON Schemas for all configuration files in `schemas/`:
+
+- `run_configurations.schema.json`
+- `external_tools.schema.json`
+- `toolchain.schema.json`
+- `cmake_settings.schema.json`
+
+When `jsonls` (vscode-json-language-server) attaches to a buffer inside
+`.orch/`, OrchLaunch automatically registers the schemas. This gives you:
+
+- **Autocompletion** — field names, enum values (config types, console modes, toolchain types)
+- **Hover documentation** — descriptions for every field
+- **Validation** — JSON structure errors inline
+
+### Installing jsonls
+
+**Arch Linux:**
+```bash
+sudo pacman -S vscode-langservers-extracted
+```
+
+**npm (cross-platform):**
+```bash
+npm install -g vscode-langservers-extracted
+```
+
+Then ensure `jsonls` is in your PATH and configured in Neovim (via `nvim-lspconfig` or `vim.lsp.config`).
+
+### Manual Schema Setup
+
+If you don't use OrchLaunch's auto-registration, add to your `jsonls` config:
+
+```lua
+require('lspconfig').jsonls.setup({
+  settings = {
+    json = {
+      schemas = {
+        { fileMatch = { "**/.orch/run_configurations.json" }, url = "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/run_configurations.schema.json" },
+        { fileMatch = { "**/.orch/external_tools.json" }, url = "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/external_tools.schema.json" },
+        { fileMatch = { "**/.orch/toolchain.json" }, url = "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/toolchain.schema.json" },
+        { fileMatch = { "**/.orch/cmake_settings.json" }, url = "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/cmake_settings.schema.json" },
+      }
+    }
+  }
+})
+```
+
+### $schema Reference
+
+Add a `$schema` property to your config files for schema support in any editor:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/olokreaz/orchlaunch/master/schemas/run_configurations.schema.json",
+  "configurations": [...]
+}
+```
+
+OrchLaunch can auto-add this on save with `setup({ write_schema_ref = true })`.
 
 ## Configuration files
 
@@ -262,37 +341,44 @@ reads back target names, types and artifact paths.
   browser with artifact details and `b`/`r`/`d`/`e` actions for build, run,
   debug and edit-config.
 
-## UI
+## Buffer-based Editing (New Default UI)
 
-`:OrchLaunch` opens the Run/Debug Configurations browser.
+The new default UI edits configuration files as plain JSON buffers:
 
-| Key | Action |
-| --- | --- |
-| `Tab` / `Shift+Tab` | Move focus |
-| `j` / `k` | Move in the list |
-| `r` / `d` | Run / Debug the selected configuration |
-| `e` | Edit |
-| `a` | New configuration |
-| `y` | Duplicate |
-| `D` | Delete |
-| `A` | Set as active |
-| `m` | Load the CMake project (configure + discover targets) |
-| `t` | Browse CMake targets |
-| `Esc` | Close |
+- **`:OrchLaunchEdit [configs|tools|toolchain|cmake|breakpoints]`** — opens the file in a split. Without arguments, prompts which file. With a file type, opens that file; you can then pick a specific entry (e.g. a configuration name) to jump to it.
+- **`:OrchLaunchNew [native|remote-debug|compound|external_tool|toolchain|cmake_profile]`** — creates a new entry with sensible defaults, saves it, and opens the file at the new entry.
+- **JSON Schema** — autocompletion and validation via `jsonls`.
+- **Semantic validation** — OrchLaunch adds its own diagnostics (via `vim.diagnostic`) for things JSON Schema can't express: unknown CMake targets, missing toolchains, compound cycles, duplicate names, sudo with hidden/none console, etc.
+- **Virtual text** — in `run_configurations.json`, native configurations show the resolved executable path as virtual text at the end of the line (toggle with `ui.virtual_text`).
+- **Window style** — `ui.edit.window = "split" | "vsplit" | "float" | "tab"`.
 
-The CMake profile manager (`:OrchLaunchCMake`) is a list with **New** (`a`),
-**Edit** (`e`), **Delete** (`D`), **Toggle** (`t`), **Set active** (`A`),
-**Import** (`i`) and **Project** (`p`). Editing opens a form: move with `Tab`/`Shift+Tab` (or `s` to jump by letter),
-press `<CR>` to edit a field, `<Space>` to toggle booleans, save with `Ctrl+S`,
-close with `q` / `Esc`. Manual profiles are fully editable;
-profiles imported from `CMakePresets.json` / `CMakeUserPresets.json` are
-read-only.
-
-## Commands
+### New Commands
 
 | Command | Description |
 | --- | --- |
-| `:OrchLaunch` | Open the configurations browser |
+| `:OrchLaunchEdit [configs\|tools\|toolchain\|cmake\|breakpoints]` | Open a configuration file for editing |
+| `:OrchLaunchNew [type]` | Create a new configuration entry |
+| `:OrchLaunchSelectConfig` | Select and run a configuration (vim.ui.select) |
+| `:OrchLaunchSelectDebug` | Select and debug a configuration |
+| `:OrchLaunchSelectTarget` | Select a CMake target |
+| `:OrchLaunchSelectToolchain` | Select a toolchain |
+| `:OrchLaunchSelectProfile [configure\|build\|all]` | Select a CMake profile |
+| `:OrchLaunchSelectPreset [configure\|build]` | Select a CMake preset |
+| `:OrchLaunchSelectTool` | Select an external tool |
+| `:OrchLaunchRunHere` | Run the configuration under cursor in `run_configurations.json` |
+
+### Legacy fibrous commands (when using `ui.backend = "fibrous"`)
+
+| Command | Description |
+| --- | --- |
+| `:OrchLaunchEditConfig [name]` | Edit a config with fibrous form |
+| `:OrchLaunchBreakpoints` | Manage breakpoints with fibrous |
+
+## Commands (Buffer UI Default)
+
+| Command | Description |
+| --- | --- |
+| `:OrchLaunch` | Open configurations browser (buffer: vim.ui.select, fibrous: browser) |
 | `:OrchLaunchSelect [name]` | Set the active configuration |
 | `:OrchLaunchRun [name]` | Run a configuration (active when omitted) |
 | `:OrchLaunchDebug [name]` | Debug a configuration (active when omitted) |
@@ -300,17 +386,18 @@ read-only.
 | `:OrchLaunchToggleBreakpoint` | Toggle a breakpoint at the cursor |
 | `:OrchLaunchBreakpoint <expr>` | Set a conditional breakpoint at the cursor |
 | `:OrchLaunchLogBreakpoint <msg>` | Set a log point at the cursor |
-| `:OrchLaunchBreakpoints` | Manage breakpoints |
+| `:OrchLaunchBreakpoints` | Manage breakpoints (buffer edit or fibrous) |
 | `:OrchLaunchClearBreakpoints` | Clear all breakpoints |
-| `:OrchLaunchEdit [name]` | Edit a run configuration |
-| `:OrchLaunchToolchains` | Manage toolchains |
-| `:OrchLaunchExternalTools` | Manage external tools |
+| `:OrchLaunchEdit [type]` | Open a configuration file for editing |
+| `:OrchLaunchNew [type]` | Create a new configuration entry |
+| `:OrchLaunchToolchains` | Manage toolchains (buffer: vim.ui.select, fibrous: dialog) |
+| `:OrchLaunchExternalTools` | Manage external tools (buffer: vim.ui.select, fibrous: dialog) |
 | `:OrchLaunchExternalTool <name>` | Run an external tool |
-| `:OrchLaunchCMake` | Manage CMake profiles |
+| `:OrchLaunchCMake` | Manage CMake profiles (buffer: vim.ui.select, fibrous: dialog) |
 | `:OrchLaunchCMakeProject` | Set the CMake project directory |
 | `:OrchLaunchImportCMakePresets` | Import CMake presets as disabled profiles |
 | `:OrchLaunchLoadCMake` | Configure the project and load its CMake targets |
-| `:OrchLaunchTargets` | Browse CMake targets |
+| `:OrchLaunchTargets` | Browse CMake targets (buffer: vim.ui.select, fibrous: browser) |
 | `:OrchLaunchConfigure` | Configure with the active CMake profile |
 | `:OrchLaunchBuild [target]` | Build the project or a single target |
 | `:OrchLaunchRebuild [target]` | Clean and rebuild |
@@ -320,6 +407,15 @@ read-only.
 | `:OrchLaunchCreateProject [dir]` | Create a `.orch` project |
 | `:OrchLaunchReload` | Reload all `.orch` files |
 | `:OrchLaunchCheck` | Check tools and integrations |
+| `:OrchLaunchCancel` | Cancel the running build or external tool step |
+| `:OrchLaunchSelectConfig` | Select and run a configuration |
+| `:OrchLaunchSelectDebug` | Select and debug a configuration |
+| `:OrchLaunchSelectTarget` | Select a CMake target |
+| `:OrchLaunchSelectToolchain` | Select a toolchain |
+| `:OrchLaunchSelectProfile [kind]` | Select a CMake profile |
+| `:OrchLaunchSelectPreset [kind]` | Select a CMake preset |
+| `:OrchLaunchSelectTool` | Select an external tool |
+| `:OrchLaunchRunHere` | Run config under cursor in run_configurations.json |
 
 ## API
 
@@ -339,7 +435,9 @@ state.add_external_tool(config.external_tool({ name = "gen", program = "gen" }))
 state.save()
 state.reload()
 
-orch.open()          -- browser
+orch.open()          -- browser (uses configured UI backend)
+orch.edit("run_configurations", "Game")  -- edit a config
+orch.new("native")   -- create new config
 orch.select("Game")  -- set active
 orch.run()           -- run active
 orch.debug("Attach") -- debug a configuration
@@ -361,8 +459,12 @@ orchlauncher/
 │   ├── commands.lua    -- user commands
 │   ├── cmake.lua       -- CMake configuration and target discovery
 │   ├── breakpoints.lua -- project breakpoints (conditions, persistence)
+│   ├── validate.lua    -- semantic validation (diagnostics)
+│   ├── edit.lua        -- buffer-based editing UI
+│   ├── select.lua      -- vim.ui.select based pickers
+│   ├── schemas.lua     -- JSON Schema registration for jsonls
 │   ├── debug/          -- DAP glue: backends (lldb, gdb) + neutral session
-│   └── ui/             -- fibrous.nvim UI
+│   └── ui/             -- fibrous.nvim UI (optional)
 │       ├── init.lua    -- shared helpers (notifications, env parsing)
 │       ├── fibrous/    -- renderer glue, forms, browser, editors, debugger
 │       │   ├── form.lua     -- form scaffolding (fields, save, navigation)
@@ -372,6 +474,7 @@ orchlauncher/
 │       │   ├── editors/     -- one module per editor window
 │       │   └── debugger.lua -- debugger panel
 │       └── dialogs/    -- toolchains / external tools specs
+├── schemas/            -- JSON Schemas (draft-07)
 ├── tests/              -- headless test suite
 └── README.md
 ```
