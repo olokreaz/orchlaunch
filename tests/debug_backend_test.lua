@@ -25,7 +25,9 @@ h.eq("resolve defaults to lldb", registry.resolve({}).name, "lldb")
 h.eq("resolve by adapter name", registry.resolve({ adapter = "gdb" }).name, "gdb")
 h.eq("resolve by kind", registry.resolve({ kind = "lldb" }).name, "lldb")
 h.eq("unknown adapter falls back to default", registry.resolve({ adapter = "weird" }).name, "lldb")
-h.eq("adapter path falls back to default", registry.resolve({ adapter = "/usr/bin/lldb-dap" }).name, "lldb")
+h.eq("lldb adapter path resolves to lldb", registry.resolve({ adapter = "/usr/bin/lldb-dap" }).name, "lldb")
+h.eq("gdb adapter path resolves to gdb", registry.resolve({ adapter = "/usr/bin/gdb" }).name, "gdb")
+h.eq("unknown adapter path falls back to default", registry.resolve({ adapter = "/opt/mydap" }).name, "lldb")
 h.eq("explicit backend wins", registry.resolve({ backend = "gdb", adapter = "lldb" }).name, "gdb")
 
 -- 3. adapter definitions -------------------------------------------------------

@@ -82,7 +82,6 @@ h.eq("program compiles", vim.v.shell_error, 0, compiled)
 local breakpoints = require("dap.breakpoints")
 local bufnr = vim.fn.bufadd(root .. "/prog.cpp")
 vim.fn.bufload(bufnr)
-breakpoints.set({}, bufnr, tick_line)
 
 --- Whether something is listening on a TCP port (read from /proc/net/tcp), so
 --- we can wait for lldb-server without stealing its single connection.
@@ -120,6 +119,9 @@ local config = require("orchlaunch.config")
 local runner = require("orchlaunch.runner")
 
 orch.create_project(root)
+-- Project loading intentionally clears live breakpoints, so register this
+-- test's breakpoint after the project is loaded.
+breakpoints.set({}, bufnr, tick_line)
 state.add_toolchain(config.toolchain({ name = "Clang", type = "system", cmake = "cmake", c = "clang", cxx = "clang++", debugger = "lldb" }))
 state.add_configuration(config.remote_debug({
     name = "attach",

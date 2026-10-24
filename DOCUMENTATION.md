@@ -279,7 +279,9 @@ Without those plugins the built-in fibrous panel is used: threads, frames,
 scopes and variables with Continue/Pause/Step Over/In/Out/Restart/Stop/Toggle BP
 controls, re-rendered on session events.
 
-CMake configure/build/install output is parsed into the standard **quickfix**
+CMake configure/build/install and external-tool steps run asynchronously, so
+Neovim stays responsive; `:OrchLaunchCancel` stops the active step. Their output
+is parsed into the standard **quickfix**
 list (`OrchLaunch: CMake <step>`), so existing quickfix UIs — trouble.nvim,
 snacks.nvim, `:copen` — show compiler diagnostics without OrchLaunch-specific
 code. Breakpoints support conditions and log points
@@ -317,6 +319,7 @@ Known limits: attaching to an existing PID may be blocked by
 | `:OrchLaunchClean` | Clean build outputs |
 | `:OrchLaunchInstall [target]` | Configure, build and install |
 | `:OrchLaunchTest` | Build and run the CTest suite |
+| `:OrchLaunchCancel` | Cancel the running CMake or external-tool step |
 | `:OrchLaunchCreateProject [dir]` | Create a `.orch` project |
 | `:OrchLaunchReload` | Reload all `.orch` files |
 | `:OrchLaunchDebugger` | Open the debugger UI (dap-view/dap-ui, fibrous fallback) |
@@ -385,7 +388,7 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 
 ### Configuration types
 - Native: run a program (path or CMake target), with working directory, args, env, stdin/stdout/stderr, console mode (embedded/external/hidden), and before-launch steps.
-- Remote-debug: attach to remote process (symbol/CMake target or executable path), connection (host:port), adapter (gdb/lldb), env, cwd, args, before-launch.
+- Remote-debug: attach to a remote process via `connection` (host:port) and `symbol` (executable path), adapter (gdb/lldb), and before-launch steps. Attach requests do not use `cwd`, `args` or `env`.
 - Compound: run multiple configurations in order.
 
 ### Before-launch steps

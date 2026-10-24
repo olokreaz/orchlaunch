@@ -1,12 +1,14 @@
 # OrchLaunch Audit
 
 - Baseline: `e50c5c3` (`feat: add CMake actions, targets browser and toolchain environments`)
-- Audited HEAD: `ccbe9f0` (`fix: detect compound configuration cycles`)
+- Audited HEAD: `e679a18` (`docs: add full OrchLaunch audit`)
+- Fixes below are implemented in the working tree on top of `e679a18`.
 - Date: 2026-10-23
 - Scope: `lua/orchlaunch/**`, CMake preset handling, run/debug dispatch, DAP
   backends, fibrous UI, persistence, breakpoints, integrations and tests.
-- P1-P5 are not defined by the task or the repository. This audit does not
-  invent them; high-severity issues below were fixed independently.
+- P1-P3 were supplied with the follow-up task: preserve hand edits (P1), survive
+  malformed JSON (P2) and report missing executables without a Lua traceback
+  (P3). P4/P5 were not supplied. P1-P3 are covered by the fixes below.
 
 ## Severity model
 
@@ -23,29 +25,29 @@
 | H-01 | High | Fixed in `55c1d67` | Rename collision created duplicate names. |
 | H-02 | High | Fixed in `acaa7e3` | CMake profile editor never listed configured toolchains. |
 | H-03 | High | Fixed in `ccbe9f0` | Compound configuration cycles caused unbounded recursion. |
-| M-01 | Medium | Open | Malformed JSON or valid JSON with the wrong shape is handled unsafely. |
-| M-02 | Medium | Open | Saves are non-atomic; reload can leave partially mixed state. |
-| M-03 | Medium | Open | Debug session is marked active before backend validation. |
-| M-04 | Medium | Open | Explicit adapter paths are resolved through the default backend. |
-| M-05 | Medium | Open | `console.keep_open` / `clear_on_start` are stored but ignored. |
-| M-06 | Medium | Open | Run/debug environment omits the active CMake profile environment. |
-| M-07 | Medium | Open | Malformed preset `inherits` can throw during profile import. |
-| M-08 | Medium | Open | Malformed CMake File API replies can throw during target discovery. |
-| M-09 | Medium | Open | `ctest` and preflight ignore the configured toolchain CMake. |
-| M-10 | Medium | Open | Preset import is not idempotent when a manual profile owns the preset name. |
-| M-11 | Medium | Open | `presets.visible()` ignores `condition`. |
-| M-12 | Medium | Open | Creating a nested project loads the highest ancestor instead of the created root. |
-| M-13 | Medium | Open | Shared fibrous augroups break nested list/field dialogs. |
-| M-14 | Medium | Open | CMake/build/tool steps block the Neovim UI and cannot be cancelled. |
-| M-15 | Medium | Open | Switching projects leaves old breakpoints installed in nvim-dap. |
-| L-01 | Low | Open | Direct `state.update_*()` renames do not update active/references. |
-| L-02 | Low | Open | `config.from_lua()` executes arbitrary Lua. |
-| L-03 | Low | Open | Breakpoint toggle without nvim-dap silently no-ops but reports "removed". |
-| L-04 | Low | Open | Unknown configuration/console types fall through to a different behavior. |
-| L-05 | Low | Open | Filesystem target fallback does not match symlinked executables. |
-| L-06 | Low | Open | Multi-config File API artifacts use the first configuration only. |
-| L-07 | Low | Open | `project.create()` can leave a partially created `.orch`. |
-| L-08 | Low | Open | Remote-debug documentation advertises unsupported env/cwd/args. |
+| M-01 | Medium | Fixed | Malformed JSON or valid JSON with the wrong shape is handled unsafely. |
+| M-02 | Medium | Fixed | Saves are non-atomic; reload can leave partially mixed state. |
+| M-03 | Medium | Fixed | Debug session is marked active before backend validation. |
+| M-04 | Medium | Fixed | Explicit adapter paths are resolved through the default backend. |
+| M-05 | Medium | Fixed | `console.keep_open` / `clear_on_start` are stored but ignored. |
+| M-06 | Medium | Fixed | Run/debug environment omits the active CMake profile environment. |
+| M-07 | Medium | Fixed | Malformed preset `inherits` can throw during profile import. |
+| M-08 | Medium | Fixed | Malformed CMake File API replies can throw during target discovery. |
+| M-09 | Medium | Fixed | `ctest` and preflight ignore the configured toolchain CMake. |
+| M-10 | Medium | Fixed | Preset import is not idempotent when a manual profile owns the preset name. |
+| M-11 | Medium | Fixed | `presets.visible()` ignores `condition`. |
+| M-12 | Medium | Fixed | Creating a nested project loads the highest ancestor instead of the created root. |
+| M-13 | Medium | Fixed | Shared fibrous augroups break nested list/field dialogs. |
+| M-14 | Medium | Fixed | CMake/build/tool steps block the Neovim UI and cannot be cancelled. |
+| M-15 | Medium | Fixed | Switching projects leaves old breakpoints installed in nvim-dap. |
+| L-01 | Low | Fixed | Direct `state.update_*()` renames do not update active/references. |
+| L-02 | Low | Fixed | `config.from_lua()` executes arbitrary Lua. |
+| L-03 | Low | Fixed | Breakpoint toggle without nvim-dap silently no-ops but reports "removed". |
+| L-04 | Low | Fixed | Unknown configuration/console types fall through to a different behavior. |
+| L-05 | Low | Fixed | Filesystem target fallback does not match symlinked executables. |
+| L-06 | Low | Fixed | Multi-config File API artifacts use the first configuration only. |
+| L-07 | Low | Fixed | `project.create()` can leave a partially created `.orch`. |
+| L-08 | Low | Fixed | Remote-debug documentation advertises unsupported env/cwd/args. |
 
 ## Fixed high-severity findings
 
@@ -93,6 +95,7 @@
 
 ### M-01: Unsafe JSON/schema handling during load and reload
 
+- Fix: `config.load()` returns `nil, error`, rejects non-object and non-empty list JSON; each loader validates its schema; `state.reload()` builds the complete state before replacement and `init.load()` reports failures without throwing.
 - Files: `lua/orchlaunch/config.lua:125-145`,
   `lua/orchlaunch/state.lua:164-185`, `lua/orchlaunch/init.lua:21-34`,
   `lua/orchlaunch/init.lua:46-51`.
@@ -108,6 +111,7 @@
 
 ### M-02: Non-atomic writes and partial reload
 
+- Fix: `config.save()` writes a sibling temporary file, flushes and renames it; `load_state()` constructs the whole state before replacing the live one.
 - Files: `lua/orchlaunch/config.lua:159-169`,
   `lua/orchlaunch/state.lua:592-615`, `lua/orchlaunch/active.lua:37-49`,
   `lua/orchlaunch/breakpoints.lua:258-275`.
@@ -119,6 +123,7 @@
 
 ### M-03: Debug state starts before backend validation
 
+- Fix: `debug.start()` validates the backend and availability first, calls `session.start_session()` only when actually launching, and resets the session on failure.
 - Files: `lua/orchlaunch/debug/init.lua:81-104`,
   `lua/orchlaunch/debug/session.lua:347-353`.
 - `session.start_session()` is called at line 89, before backend resolution,
@@ -130,6 +135,7 @@
 
 ### M-04: Explicit adapter path is forced through the default backend
 
+- Fix: Backend resolution uses the adapter basename (`gdb`/`lldb`); an explicit `dap_path` satisfies availability.
 - Files: `lua/orchlaunch/debug/init.lua:69-72`,
   `lua/orchlaunch/debug/backend.lua:105-131`,
   `lua/orchlaunch/debug/backends/lldb.lua:54-56`,
@@ -144,6 +150,7 @@
 
 ### M-05: Console flags are not implemented
 
+- Fix: `open_terminal()` honors `keep_open` and `clear_on_start`; unknown console modes warn and fall back to `embedded`.
 - Files: `lua/orchlaunch/runner.lua:225-244`,
   `lua/orchlaunch/runner.lua:344-357`,
   `lua/orchlaunch/ui/fibrous/editors/native.lua:39-41`,
@@ -158,6 +165,7 @@
 
 ### M-06: Run/debug environment omits the active CMake profile environment
 
+- Fix: `launch_environment()` merges toolchain, active CMake profile and configuration environments in that order.
 - Files: `lua/orchlaunch/runner.lua:250-259`,
   `lua/orchlaunch/cmake.lua:158-175`, `README.md:156-159`.
 - README says toolchain, active profile and run configuration environments are
@@ -170,6 +178,7 @@
 
 ### M-07: Malformed preset `inherits` can throw during import
 
+- Fix: `presets.resolve()` validates `inherits` types and detects cycles, returning `nil, error`; preset import reports the error.
 - Files: `lua/orchlaunch/presets.lua:329-334`,
   `lua/orchlaunch/state.lua:398`.
 - A non-string, non-table `inherits` value (for example a number) reaches
@@ -180,6 +189,7 @@
 
 ### M-08: Malformed File API replies can throw during target discovery
 
+- Fix: `read_targets()` guards every nested File API table and skips malformed entries.
 - Files: `lua/orchlaunch/cmake.lua:453-495`.
 - `codemodel.configurations` is checked, but each `configuration.targets` is
   passed directly to `ipairs`; a malformed reply with a non-table value raises.
@@ -187,6 +197,7 @@
 
 ### M-09: `ctest` and preflight ignore the toolchain CMake
 
+- Fix: `ctest_program()` resolves `ctest` from the profile, `CMAKE_CTEST_COMMAND` or the configured CMake sibling; preflight checks the effective toolchain.
 - Files: `lua/orchlaunch/cmake.lua:312-330`,
   `lua/orchlaunch/preflight.lua:47-60`.
 - `M.cmake_program()` honors the toolchain CMake path, but test discovery and
@@ -197,6 +208,7 @@
 
 ### M-10: Preset import is not idempotent on name collisions
 
+- Fix: `sync_cmake_profiles()` identifies already-imported profiles by their configure/build preset pair and skips them.
 - Files: `lua/orchlaunch/state.lua:371-406`.
 - When a manual profile already uses a build preset's name, `free_name()` adds
   a suffix. On every later import the same check fails again, producing
@@ -206,6 +218,7 @@
 
 ### M-11: Preset visibility ignores `condition`
 
+- Fix: `presets.condition()` implements `const`, `not`, `and`, `or`, `equals`, `in` and `matches` with `$env`/`$penv` expansion; `visible()` applies it without mutating the caller context.
 - Files: `lua/orchlaunch/presets.lua:251-258`,
   `lua/orchlaunch/ui/fibrous/cmake_profile.lua:171-179`,
   `lua/orchlaunch/state.lua:384-395`.
@@ -217,6 +230,7 @@
 
 ### M-12: Nested project creation loads the parent project
 
+- Fix: `create_project()` passes the explicit `project.orch_dir(root)` to `state.setup()`.
 - Files: `lua/orchlaunch/project.lua:35-50`,
   `lua/orchlaunch/init.lua:140-143`.
 - `create_project(root)` creates `.orch` under `root` and then calls
@@ -229,6 +243,7 @@
 
 ### M-13: Shared fibrous augroups break nested dialogs
 
+- Fix: Each list/fields/form instance receives a unique augroup and deletes only its own group.
 - Files: `lua/orchlaunch/ui/fibrous/util.lua:63-73`,
   `lua/orchlaunch/ui/fibrous/list.lua:82,315`,
   `lua/orchlaunch/ui/fibrous/fields.lua:232`.
@@ -241,6 +256,7 @@
 
 ### M-14: Synchronous CMake/build/tool steps block the UI
 
+- Fix: `runner` exposes async configure/build/clean/rebuild/install/test/load/external-tool paths used by commands and the UI, plus `:OrchLaunchCancel`; the sync API remains available.
 - Files: `lua/orchlaunch/process.lua:82-92`,
   `lua/orchlaunch/runner.lua:48-106`.
 - Runs use `vim.system(...):wait()`; build/test/configure can block Neovim for
@@ -250,6 +266,7 @@
 
 ### M-15: Project switch leaves old breakpoints installed
 
+- Fix: `breakpoints.load()` clears managed live breakpoints before applying the new project set.
 - Files: `lua/orchlaunch/init.lua:21-34`,
   `lua/orchlaunch/breakpoints.lua:279-302`.
 - `init.load()` applies the new project's persisted breakpoints but never
@@ -262,6 +279,7 @@
 
 ### L-01: Direct state renames do not update active references
 
+- Fix: Configuration/profile update and remove paths update the `active` bookkeeping.
 - Files: `lua/orchlaunch/state.lua:510-561`,
   `lua/orchlaunch/active.lua:62`.
 - The UI updates the active key after a rename, but the public state API does
@@ -272,6 +290,7 @@
 
 ### L-02: `config.from_lua()` executes arbitrary Lua
 
+- Fix: `from_lua()` runs in an empty environment, disables LuaJIT during evaluation and enforces an instruction budget.
 - File: `lua/orchlaunch/config.lua:246`.
 - The loader is not called internally, but it is a public function. Passing
   untrusted text executes arbitrary code.
@@ -280,6 +299,7 @@
 
 ### L-03: Breakpoint toggle without nvim-dap silently no-ops
 
+- Fix: `set`/`toggle`/`clear` return success and commands report missing `nvim-dap` instead of claiming a removal.
 - Files: `lua/orchlaunch/breakpoints.lua:100-107`,
   `lua/orchlaunch/commands.lua:250-261`.
 - `toggle()` returns silently when nvim-dap is absent; the command then reports
@@ -288,6 +308,7 @@
 
 ### L-04: Unknown configuration and console types fall through
 
+- Fix: Unknown console modes warn and use `embedded`; unknown configuration types are rejected before dispatch.
 - Files: `lua/orchlaunch/runner.lua:344-357`,
   `lua/orchlaunch/runner.lua:421-426`.
 - Any non-compound/non-remote configuration is launched as native. Any console
@@ -297,6 +318,7 @@
 
 ### L-05: Symlinked executables are not found by the fallback search
 
+- Fix: Filesystem fallback accepts readable symlinked artifacts.
 - File: `lua/orchlaunch/cmake.lua:607-640`.
 - The breadth-first fallback only accepts `kind == "file"`; a symlinked build
   artifact is reported as a link and skipped.
@@ -304,6 +326,7 @@
 
 ### L-06: Multi-config artifacts use the first configuration
 
+- Fix: Targets retain per-configuration artifacts and `find_target()` selects the active build type, falling back to the first.
 - Files: `lua/orchlaunch/cmake.lua:475-493`,
   `lua/orchlaunch/cmake.lua:388-410`.
 - Target discovery deduplicates by name and records the artifact from the first
@@ -314,6 +337,7 @@
 
 ### L-07: `project.create()` can leave a partial `.orch`
 
+- Fix: `project.create()` scaffolds in a temporary sibling directory and renames it into place.
 - File: `lua/orchlaunch/project.lua:56-84`.
 - Files are written sequentially; a failure after the directory or first file
   leaves a partial project that later looks valid.
@@ -322,6 +346,7 @@
 
 ### L-08: Remote-debug documentation advertises unsupported fields
 
+- Fix: `DOCUMENTATION.md` now states that attach requests ignore `env`, `cwd` and `args`.
 - Files: `DOCUMENTATION.md:387-390`, `lua/orchlaunch/types.lua:65-73`,
   `lua/orchlaunch/runner.lua:388-400`.
 - Documentation lists env, cwd and args for remote-debug; the type and runner
@@ -331,12 +356,18 @@
 
 ## Verification
 
-Executed at `ccbe9f0` with `ORCHLAUNCH_DEPS=/tmp/opencode/deps`:
+Executed on `e679a18` plus these fixes with `ORCHLAUNCH_DEPS=/tmp/opencode/deps`:
 
-- `bash tests/run.sh`: `EXIT=0`, `=== ALL TESTS PASSED ===`.
+- `bash tests/run.sh`: `EXIT=0`, `=== ALL TESTS PASSED ===`, no `FAIL` lines.
 - `bash tests/func/run.sh`: `6 passed, 0 failed`,
   `=== FUNCTIONAL TESTS PASSED ===`.
 - Targeted checks included in the full run:
+  - `tests/hardening_test.lua`: 42 checks (JSON shape errors, atomic saves,
+    external-edit conflicts, sandbox, preset conditions, async cancel, augroups).
+  - `tests/e2e_debug_attach_test.lua`: 9 checks (real `lldb-server` attach).
+  - `tests/debug_backend_test.lua`: 34 checks.
+  - `tests/e2e_cmake_test.lua`: 101 checks (toolchain/profile env, real CTest).
+  - `tests/e2e_runner_test.lua`: 28 checks.
   - `tests/rename_validation_test.lua`: 13 checks.
   - `tests/e2e_ui_test.lua`: 78 checks.
   - `tests/fibrous_cmake_profile_test.lua`: 36 checks.
@@ -344,23 +375,18 @@ Executed at `ccbe9f0` with `ORCHLAUNCH_DEPS=/tmp/opencode/deps`:
 
 ## Manual checks still required
 
-- Real lldb-dap and GDB DAP sessions, including explicit adapter paths and
-  attach flows.
 - Remote debugging against a real gdbserver/lldb-server host.
 - `ptrace_scope=1` attach behavior; attach to another user's process remains
   intentionally blocked.
-- Embedded console lifetime, `keep_open`, `clear_on_start` and invalid console
-  modes.
-- CMake preset `condition`, multi-config generators, symlinked artifacts and
-  nested projects.
-- Nested fibrous dialogs and resize behavior with a real interactive Neovim.
+- Windows fallback for the atomic rename path.
 - Running the plugin under `sudo` where the debugger cannot elevate.
+- Interactive resize behavior of two simultaneously open fibrous dialogs.
 
 ## Limitations of this audit
 
-- No real interactive GUI session, remote host or user projects were available.
-- Tests are headless plus a tmux-driven fibrous editor test; they do not exercise
-  real debug adapters against real programs.
+- No remote host, Windows/macOS environment or user projects were available.
+- Tests are headless plus a tmux-driven fibrous editor test; the debug e2e tests
+  do run real LLDB and GDB DAP sessions locally.
 - `INTERFACE_LIBRARY` targets are absent from CMake File API, so that runtime
   kind cannot be validated end-to-end.
-- P1-P5 are undefined, so no parity claim against them is made.
+- P4/P5 were not supplied, so no parity claim against them is made.
