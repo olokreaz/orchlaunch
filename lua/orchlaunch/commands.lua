@@ -112,11 +112,7 @@ end
 --- Determines the UI backend to use.
 --- @return "buffer" | "fibrous"
 local function get_ui_backend()
-    local ok, cfg = pcall(function() return require("orchlaunch").config.ui end)
-    if ok and cfg and cfg.backend then
-        return cfg.backend
-    end
-    return "buffer"
+    return require("orchlaunch.options").get().ui.backend
 end
 
 function M.register()

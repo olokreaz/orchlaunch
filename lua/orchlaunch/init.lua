@@ -11,6 +11,7 @@ local state = require("orchlaunch.state")
 local schemas = require("orchlaunch.schemas")
 local edit = require("orchlaunch.edit")
 local select = require("orchlaunch.select")
+local options = require("orchlaunch.options")
 
 local M = {}
 
@@ -110,7 +111,8 @@ end
 ---@param opts? OrchSetupOptions
 ---@return OrchState?
 function M.setup(opts)
-    opts = opts or {}
+    opts = options.setup(opts)
+    M.config = opts
     commands.register()
     install_autocmds()
 
@@ -143,11 +145,7 @@ end
 
 --- Opens the Run/Debug configurations browser (uses configured UI backend).
 function M.open()
-    local backend = "buffer"
-    local ok, cfg = pcall(function() return require("orchlaunch").config.ui end)
-    if ok and cfg and cfg.backend then
-        backend = cfg.backend
-    end
+    local backend = options.get().ui.backend
 
     if backend == "fibrous" then
         local ok, fibrous = pcall(require, "orchlaunch.ui.fibrous.browser")

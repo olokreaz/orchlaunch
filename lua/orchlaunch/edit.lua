@@ -16,23 +16,12 @@ local INFO = vim.log.levels.INFO
 ---@class EditOptions
 ---@field window? "split" | "vsplit" | "float" | "tab"
 ---@field fold_others? boolean
+---@field whole_file? boolean Open the file directly, without the entry picker.
 
----@type EditOptions
-local default_edit_opts = {
-    window = "split",
-    fold_others = false,
-}
-
---- Returns the default options merged with user config.
+--- Returns the configured edit options (see `orchlaunch.options`).
 ---@return EditOptions
 local function get_edit_opts()
-    local ok, user_opts = pcall(function()
-        return require("orchlaunch").config.ui.edit
-    end)
-    if ok and type(user_opts) == "table" then
-        return vim.tbl_deep_extend("force", default_edit_opts, user_opts)
-    end
-    return default_edit_opts
+    return vim.deepcopy(require("orchlaunch.options").get().ui.edit)
 end
 
 --- Opens a file in the configured window style.
@@ -316,10 +305,7 @@ function M.show_virtual_text(bufnr)
     vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 
     if not state.is_loaded() then return end
-    local ok, user_opts = pcall(function()
-        return require("orchlaunch").config.ui.virtual_text
-    end)
-    if not (ok and user_opts == true) then return end
+    if not require("orchlaunch.options").get().ui.virtual_text then return end
 
     local data = config.load(state.get().paths.run_configurations)
     if not data or not data.configurations then return end
