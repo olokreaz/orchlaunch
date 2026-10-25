@@ -218,7 +218,8 @@ function M.register()
         if not ensure_loaded() then return end
 
         -- Parse optional subcommand: configs, tools, toolchain, cmake, breakpoints
-        local arg = args.args:lower()
+        -- plus optional entry name: ":OrchLaunchEdit configs Game"
+        local parts = vim.split(vim.trim(args.args), "%s+")
         local file_type_map = {
             configs = "run_configurations",
             tools = "external_tools",
@@ -227,14 +228,14 @@ function M.register()
             breakpoints = "breakpoints",
         }
 
-        local file_type = file_type_map[arg]
+        local file_type = nil
         local entry_name = nil
 
-        if file_type then
-            -- If there's a second word, treat it as entry name
-            -- but for now just open the file
-        else
-            -- No subcommand, will prompt
+        if #parts >= 1 then
+            file_type = file_type_map[parts[1]:lower()]
+        end
+        if #parts >= 2 then
+            entry_name = parts[2]
         end
 
         require("orchlaunch").edit(file_type, entry_name)
