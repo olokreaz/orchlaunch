@@ -17,6 +17,7 @@
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
 local h = require("harness")
+h.require_tool("cmake")
 
 local root = h.tempdir()
 

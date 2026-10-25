@@ -75,6 +75,25 @@ function M.succeeded(result)
     return result ~= nil and result.code == 0 and (result.signal or 0) == 0
 end
 
+--- Turns the error `vim.system` raised for a failed spawn into a short,
+--- human-readable message, without Neovim's internal "vim/_core/system:NNN:"
+--- prefix.
+---@param program? string
+---@param err any
+---@return string
+function M.describe_spawn_error(program, err)
+    local name = program or "process"
+    local text = tostring(err)
+    if text:find("ENOENT", 1, true) then
+        return ("%s: command not found (is it installed and in PATH?)"):format(name)
+    end
+    if text:find("EACCES", 1, true) then
+        return ("%s: permission denied (is the file executable?)"):format(name)
+    end
+    text = text:gsub("^[%w_%./]+:%d+:%s*", "")
+    return ("%s: %s"):format(name, text)
+end
+
 --- Starts a process asynchronously.
 ---
 --- A missing executable makes `vim.system` raise ENOENT. Convert that into a
@@ -95,7 +114,7 @@ function M.start(spec, on_exit)
         code = 127,
         signal = 0,
         stdout = "",
-        stderr = ("%s: %s"):format(spec.program or "process", tostring(result)),
+        stderr = M.describe_spawn_error(spec.program, result),
     }
     if on_exit then
         vim.schedule(function()

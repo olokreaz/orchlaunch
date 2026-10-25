@@ -2,7 +2,7 @@
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 package.path = here .. "/?.lua;" .. package.path
-require("harness")
+require("harness").require_tool("cmake")
 
 local failures = 0
 local function check(name, ok, err)

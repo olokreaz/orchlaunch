@@ -275,46 +275,53 @@ h.eq("program did not run after a failed before-launch step", vim.fn.filereadabl
 -- ============================================================================
 -- 7. before-launch build of a real CMake target
 -- ============================================================================
-local proj = h.tempdir()
-h.write(proj .. "/CMakeLists.txt", [[
-cmake_minimum_required(VERSION 3.16)
-project(bl C)
-add_executable(hello main.c)
-]])
-h.write(proj .. "/main.c", [[
-#include <stdio.h>
-#include <stdlib.h>
-int main(void) {
-  const char *out = getenv("OUT");
-  if (out) { FILE *f = fopen(out, "w"); if (f) { fputs("ran\n", f); fclose(f); } }
-  return 0;
-}
-]])
-orch.create_project(proj)
-state.add_toolchain(config.toolchain({
-    name = "Gcc", type = "system", cmake = "cmake", c = "gcc", cxx = "g++", debugger = "gdb",
-}))
-state.add_cmake_profile(config.cmake_settings({
-    name = "Default", toolchain = "Gcc", generator = "Ninja", build_dir = "${workspace}/build",
-}))
-state.set_active_cmake_profile("Default")
-local marker = proj .. "/ran.txt"
-state.add_configuration(config.native({
-    name = "hello",
-    target = "hello",
-    environment = { OUT = marker },
-    console = config.console({ mode = "none" }),
-    before = config.before({ config.build() }),
-}))
-state.save()
+local build_tools = vim.fn.executable("cmake") == 1
+    and vim.fn.executable("ninja") == 1
+    and vim.fn.executable("gcc") == 1
+if build_tools then
+    local proj = h.tempdir()
+    h.write(proj .. "/CMakeLists.txt", [[
+    cmake_minimum_required(VERSION 3.16)
+    project(bl C)
+    add_executable(hello main.c)
+    ]])
+    h.write(proj .. "/main.c", [[
+    #include <stdio.h>
+    #include <stdlib.h>
+    int main(void) {
+      const char *out = getenv("OUT");
+      if (out) { FILE *f = fopen(out, "w"); if (f) { fputs("ran\n", f); fclose(f); } }
+      return 0;
+    }
+    ]])
+    orch.create_project(proj)
+    state.add_toolchain(config.toolchain({
+        name = "Gcc", type = "system", cmake = "cmake", c = "gcc", cxx = "g++", debugger = "gdb",
+    }))
+    state.add_cmake_profile(config.cmake_settings({
+        name = "Default", toolchain = "Gcc", generator = "Ninja", build_dir = "${workspace}/build",
+    }))
+    state.set_active_cmake_profile("Default")
+    local marker = proj .. "/ran.txt"
+    state.add_configuration(config.native({
+        name = "hello",
+        target = "hello",
+        environment = { OUT = marker },
+        console = config.console({ mode = "none" }),
+        before = config.before({ config.build() }),
+    }))
+    state.save()
 
-clear_msgs()
-runner.run("hello")
-wait_for(function()
-    return vim.fn.filereadable(marker) == 1
-end, 60000)
-h.check("before-launch build configured & built the CMake target", vim.fn.filereadable(marker) == 1, vim.inspect(messages))
-h.check("built target artifact resolvable", require("orchlaunch.cmake").find_target("hello") ~= nil)
+    clear_msgs()
+    runner.run("hello")
+    wait_for(function()
+        return vim.fn.filereadable(marker) == 1
+    end, 60000)
+    h.check("before-launch build configured & built the CMake target", vim.fn.filereadable(marker) == 1, vim.inspect(messages))
+    h.check("built target artifact resolvable", require("orchlaunch.cmake").find_target("hello") ~= nil)
+else
+    print("SKIP  before-launch CMake build: needs cmake, ninja and gcc in PATH")
+end
 
 -- ============================================================================
 -- 8. active configuration + external tool execution
