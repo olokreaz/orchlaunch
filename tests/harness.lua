@@ -111,6 +111,38 @@ function M.read(path)
     return content
 end
 
+--- Skips the whole test file (exit code 0) when an external tool is missing.
+--- Use for tests that need `cmake`, `gdb`, `lldb-dap`, ... so that a bare
+--- environment reports SKIP with a reason instead of a confusing failure.
+---@param tool string Executable name looked up in PATH.
+---@param reason? string Extra explanation.
+function M.require_tool(tool, reason)
+    if vim.fn.executable(tool) == 1 then
+        return
+    end
+    print(("SKIP  %s: `%s` not found in PATH%s"):format(
+        vim.fs.basename(debug.getinfo(2, "S").source:sub(2)),
+        tool,
+        reason and (" (" .. reason .. ")") or ""
+    ))
+    print("\nALL PASS: skipped (0 checks)")
+    os.exit(0)
+end
+
+--- Resets Neovim's last-error message so errors raised later inside
+--- `vim.schedule` callbacks (which `pcall` cannot catch) can be detected.
+function M.reset_errmsg()
+    vim.v.errmsg = ""
+end
+
+--- Asserts that no error was raised in a scheduled/async callback since
+--- `reset_errmsg()`. Catches bugs like calls to undefined globals that only
+--- fire on asynchronous code paths.
+---@param name string
+function M.check_no_errmsg(name)
+    M.check(name, vim.v.errmsg == "", vim.v.errmsg)
+end
+
 --- Finishes the suite: prints a summary and exits non-zero on failure.
 ---@param title string
 function M.done(title)

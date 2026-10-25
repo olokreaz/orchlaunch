@@ -23,6 +23,12 @@ local function notify(message, level)
     vim.notify("[orchlaunch] " .. message, level or vim.log.levels.INFO)
 end
 
+-- Forward declaration: `open_terminal` is used by launch paths defined above
+-- its implementation (the asynchronous native launch). Declaring the local up
+-- front keeps those references bound to it instead of an undefined global.
+---@type fun(spec: OrchProcessSpec, console: OrchConsole)
+local open_terminal
+
 -- ============================================================================
 -- Process specs
 -- ============================================================================
@@ -674,7 +680,7 @@ end
 --- Opens an embedded terminal running the given spec.
 ---@param spec OrchProcessSpec
 ---@param console OrchConsole
-local function open_terminal(spec, console)
+open_terminal = function(spec, console)
     vim.cmd("botright new")
     local buf = vim.api.nvim_get_current_buf()
     vim.bo[buf].bufhidden = "wipe"
