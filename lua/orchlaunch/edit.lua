@@ -470,14 +470,6 @@ function M.new(config_type)
     end
 end
 
---- Validates the current buffer and shows diagnostics.
----@param bufnr? integer
-function M.validate_buffer(bufnr)
-    bufnr = bufnr or vim.api.nvim_get_current_buf()
-    if not is_orch_buffer(bufnr) then return end
-    validate.validate_buffer(bufnr)
-end
-
 --- Returns whether a buffer is an OrchLaunch config buffer.
 ---@param bufnr integer
 ---@return boolean
@@ -485,6 +477,14 @@ local function is_orch_buffer(bufnr)
     local name = vim.api.nvim_buf_get_name(bufnr)
     if name == "" then return false end
     return vim.fs.find(".orch", { path = vim.fs.dirname(name), upward = true })[1] ~= nil
+end
+
+--- Validates the current buffer and shows diagnostics.
+---@param bufnr? integer
+function M.validate_buffer(bufnr)
+    bufnr = bufnr or vim.api.nvim_get_current_buf()
+    if not is_orch_buffer(bufnr) then return end
+    validate.validate_buffer(bufnr)
 end
 
 --- Sets up autocommands for validation and virtual text.
