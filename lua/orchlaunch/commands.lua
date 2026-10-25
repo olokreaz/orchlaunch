@@ -213,9 +213,10 @@ function M.register()
     vim.api.nvim_create_user_command("OrchLaunchEdit", function(args)
         if not ensure_loaded() then return end
 
-        -- Parse optional subcommand: configs, tools, toolchain, cmake, breakpoints
-        -- plus optional entry name: ":OrchLaunchEdit configs Game"
-        local parts = vim.split(vim.trim(args.args), "%s+")
+        -- Syntax: :OrchLaunchEdit [configs|tools|toolchain|cmake|breakpoints [entry name]]
+        -- The entry name is everything after the file type, so names with
+        -- spaces work.
+        local sub, rest = vim.trim(args.args):match("^(%S+)%s*(.*)$")
         local file_type_map = {
             configs = "run_configurations",
             tools = "external_tools",
@@ -227,11 +228,18 @@ function M.register()
         local file_type = nil
         local entry_name = nil
 
-        if #parts >= 1 then
-            file_type = file_type_map[parts[1]:lower()]
-        end
-        if #parts >= 2 then
-            entry_name = parts[2]
+        if sub then
+            file_type = file_type_map[sub:lower()]
+            if not file_type then
+                notify(
+                    ("unknown file %q; expected one of: configs, tools, toolchain, cmake, breakpoints"):format(sub),
+                    WARN
+                )
+                return
+            end
+            if rest ~= "" then
+                entry_name = rest
+            end
         end
 
         require("orchlaunch").edit(file_type, entry_name)
@@ -256,6 +264,8 @@ function M.register()
 
         if vim.tbl_contains(types, arg) then
             require("orchlaunch").new(arg)
+        elseif arg ~= "" then
+            notify(("unknown type %q; expected one of: %s"):format(arg, table.concat(types, ", ")), WARN)
         else
             vim.ui.select(types, { prompt = "Create new:" }, function(choice)
                 if choice then require("orchlaunch").new(choice) end
