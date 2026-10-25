@@ -145,10 +145,5 @@
         }
       }
     }
-  },
-  "oneOf": [
-    { "required": ["cmake"] },
-    { "required": ["settings"] },
-    { "required": [] }
-  ]
+  }
 }

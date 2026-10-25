@@ -72,22 +72,39 @@ local function is_array(value)
     return true
 end
 
+--- Object keys whose value is a list in the file formats (see `schemas/`).
+--- Lua cannot tell an empty list from an empty map, so an empty table under one
+--- of these keys is written as `[]`; any other empty table stays `{}`. Both
+--- decode back to the same empty table, so old files that contain `{}` keep
+--- loading. `tests/schema_check.lua` keeps this set in sync with the schemas.
+M.LIST_KEYS = {
+    args = true,
+    build_args = true,
+    configurations = true,
+    configure_args = true,
+    install_args = true,
+    profiles = true,
+    toolchains = true,
+    tools = true,
+}
+
 --- Encodes a value as pretty-printed JSON with sorted object keys.
 ---
 --- Object keys are sorted so output is deterministic and diffs stay small;
---- array order is preserved. Empty tables encode as `{}` and decode back to an
---- empty table, which is valid for both arrays and maps in Lua. Scalar escaping
---- is delegated to `vim.json.encode`.
+--- array order is preserved. An empty table encodes as `[]` under a key listed
+--- in `M.LIST_KEYS` and as `{}` otherwise. Scalar escaping is delegated to
+--- `vim.json.encode`.
 ---@param value any
 ---@param indent string
+---@param key? string Key under which `value` is stored in its parent object.
 ---@return string
-local function encode_json(value, indent)
+local function encode_json(value, indent, key)
     if type(value) ~= "table" then
         return vim.json.encode(value)
     end
 
     if next(value) == nil then
-        return "{}"
+        return (key ~= nil and M.LIST_KEYS[key]) and "[]" or "{}"
     end
 
     local inner = indent .. "  "
@@ -110,7 +127,7 @@ local function encode_json(value, indent)
 
     local fields = {}
     for _, key in ipairs(keys) do
-        fields[#fields + 1] = inner .. vim.json.encode(tostring(key)) .. ": " .. encode_json(value[key], inner)
+        fields[#fields + 1] = inner .. vim.json.encode(tostring(key)) .. ": " .. encode_json(value[key], inner, tostring(key))
     end
     return "{\n" .. table.concat(fields, ",\n") .. "\n" .. indent .. "}"
 end

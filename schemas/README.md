@@ -110,4 +110,4 @@ require("orchlaunch").setup({
 The schemas are draft-07 compatible and tested against:
 - All example configurations in the test suite
 - All examples in README.md
-- The schema drift test (`tests/schema_check.lua` / `tests/schema_check.py`)
+- The schema drift test (`tests/schema_check_test.lua` / `tests/schema_check.py`)

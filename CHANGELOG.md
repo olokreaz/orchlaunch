@@ -36,7 +36,7 @@ tagged yet; the entries below describe the current, unreleased state.
 - **UI Backend Selection** — `setup({ ui = { backend = "buffer" } })` (default)
   or `"fibrous"`. Fibrous becomes optional; falls back to buffer UI with a
   warning if fibrous is missing. Fibrous code is lazy-loaded.
-- **JSON Schema Drift Test** — `tests/schema_check.lua` validates examples
+- **JSON Schema Drift Test** — `tests/schema_check_test.lua` validates examples
   against schemas and checks enum consistency between schemas and code.
 - `:OrchLaunchCheck` now reports jsonls availability and schema registration status.
 
@@ -58,7 +58,7 @@ tagged yet; the entries below describe the current, unreleased state.
 
 ### Testing
 
-- Added `tests/schema_check.lua` — validates example configs against schemas
+- Added `tests/schema_check_test.lua` — validates example configs against schemas
   and checks enum drift between schemas and code (skips if jsonschema not
   installed).
 - Added `tests/hardening_test.lua` — regression tests for persistence,
