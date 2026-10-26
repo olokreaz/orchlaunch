@@ -5,6 +5,39 @@ tagged yet; the entries below describe the current, unreleased state.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`:OrchLaunchRun` crashed** with `attempt to call global 'open_terminal'`:
+  the asynchronous launch path used a local function declared further down.
+  Covered by a test that drives the real command (embedded, hidden, none).
+- **Setup options were ignored.** `setup()` never stored its options, so
+  `ui.backend`, `ui.edit.*` and `ui.virtual_text` had no effect. Options are
+  now normalized and stored (`orchlaunch.options`); invalid values fall back
+  with a warning.
+- **`:OrchLaunchEdit` looped forever** (the file picker discarded the choice and
+  *Open whole file* re-opened the entry picker). Rewritten; unknown
+  subcommands warn, names with spaces work, an open buffer is refreshed after
+  the plugin writes the file, `fold_others` is window-local.
+- **Semantic validation never reported anything.** The line scanner started at
+  the wrong brace depth, looked at the wrong buffer and spawned CMake on every
+  run. Rewritten on a position-aware JSON parser (`orchlaunch.jsonpos`) with
+  pure `check()` functions, real checks for tools/toolchains/profiles, exact
+  lines and no process spawning.
+- **Empty lists were written as `{}`**, violating the schemas (jsonls
+  underlined fresh projects). They are written as `[]`; old files still load.
+  A vacuous `oneOf` in `cmake_settings.schema.json` was removed.
+- **jsonls integration**: URL-encoded file URLs, idempotent `setup()`,
+  `client:notify` on Neovim >= 0.11, `$schema` inserted with a minimal text
+  edit instead of re-encoding the buffer, files outside `.orch/` are never
+  touched.
+- **Pickers did nothing** in buffer mode (they only printed *Selected ...*);
+  the profile label crashed for profiles without `kind`; `:OrchLaunchRunHere`
+  could never find a configuration.
+- Missing programs report `cmake: command not found (is it installed and in
+  PATH?)` instead of Neovim internals; tests that need cmake/gdb/lldb skip
+  with a reason; the schema drift test really runs (own draft-07 subset
+  validator, real jsonls when installed) and is part of `tests/run.sh`.
+
 ### Added
 
 - **JSON Schema & Language Server Integration** — Ships draft-07 schemas for all

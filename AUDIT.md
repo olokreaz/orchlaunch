@@ -390,3 +390,23 @@ Executed on `e679a18` plus these fixes with `ORCHLAUNCH_DEPS=/tmp/opencode/deps`
 - `INTERFACE_LIBRARY` targets are absent from CMake File API, so that runtime
   kind cannot be validated end-to-end.
 - P4/P5 were not supplied, so no parity claim against them is made.
+
+## Follow-up review (buffer UI and schemas)
+
+An independent review of the buffer UI work, run against real Neovim 0.12.6,
+a real CMake project and the real `vscode-json-language-server`. Everything
+below was reproduced first and is now covered by a test.
+
+| Finding | Severity | Test |
+| --- | --- | --- |
+| `:OrchLaunchRun` crashed on the async path (`open_terminal` used before its definition) | high | `async_run_command_test` |
+| `setup()` options silently ignored (`ui.*`) | high | `options_test` |
+| `:OrchLaunchEdit` picker loop / stack overflow | high | `edit_test` |
+| Validator found no configurations, never reported anything | high | `validate_test` |
+| Empty lists serialized as `{}` (schema violations) | medium | `schema_check_test` |
+| `write_schema_ref` rewrote the buffer (lost order, `[]` became `{}`), could touch files outside `.orch/` | medium | `schemas_test` |
+| Picker commands only notified; profile label crash without `kind`; `RunHere` never matched | medium | `select_test`, `picker_commands_test` |
+| Tool-dependent tests failed instead of skipping; raw ENOENT text in messages | low | `process_errors_test` |
+
+Still manual: real jsonls UX in an interactive session (hover text,
+completion), appearance of virtual text and folds, the `float` window style.

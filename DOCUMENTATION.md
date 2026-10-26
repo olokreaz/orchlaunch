@@ -246,10 +246,85 @@ records the CMake target kind (`executable`, `static`, `shared`, `module`,
 
 ## UI
 
-`:OrchLaunch` opens the Run/Debug Configurations browser: a list of all
-configurations on the left and the selected configuration's details on the
-right, with Run/Debug/Edit/New/Duplicate/Delete/Set Active actions and entry
-points to the toolchain, external tool and CMake profile managers.
+By default (`ui.backend = "buffer"`) OrchLaunch has no windows of its own for
+configuration: the `.orch/*.json` files are edited as **plain JSON buffers**, so
+highlighting, folding, undo and your other plugins just work. Lists and choices
+go through `vim.ui.select` / `vim.ui.input`, which means telescope, snacks,
+fzf-lua or dressing show them if you use one of those. `fibrous.nvim` is only
+needed for the optional `ui.backend = "fibrous"` browser (`:OrchLaunch` then
+opens the old list + details dialog).
+
+### Editing
+
+| Command | What it does |
+| --- | --- |
+| `:OrchLaunchEdit` | Pick a file (configurations, tools, toolchains, CMake profiles) |
+| `:OrchLaunchEdit configs` | Pick an entry or *Open whole file*; opens the file with the cursor on the entry |
+| `:OrchLaunchEdit configs My Config` | Jump straight to the entry (the name may contain spaces) |
+| `:OrchLaunchEdit tools\|toolchain\|cmake\|breakpoints [entry]` | Same for the other files |
+| `:OrchLaunchNew [type]` | Create an entry: `native`, `remote-debug`, `compound`, `external_tool`, `toolchain`, `cmake_profile` |
+| `:OrchLaunchRunHere` | Run the configuration under the cursor (in `run_configurations.json`) |
+
+Saving a file reloads the project state and re-validates it. A file you edit by
+hand is never overwritten by the plugin.
+
+### Pickers
+
+| Command | Effect of choosing an entry |
+| --- | --- |
+| `:OrchLaunchSelect[Config\|Debug]` | Run / debug the configuration |
+| `:OrchLaunchSelectProfile [configure\|build]` | Make it the active CMake profile |
+| `:OrchLaunchSelectPreset [configure\|build]` | Activate the profile that wraps the preset (or tell you to import presets) |
+| `:OrchLaunchSelectTool` | Run the external tool |
+| `:OrchLaunchToolchains`, `:OrchLaunchExternalTools`, `:OrchLaunchCMake` | Open the file at that entry |
+
+### Diagnostics
+
+Besides the JSON Schema checks done by `jsonls`, OrchLaunch reports what a
+schema cannot express, with the exact line: duplicate names (every occurrence),
+unknown CMake targets (a hint while no CMake model is loaded), unknown
+toolchains / profiles / external tools, compound cycles (with the chain) and
+unknown children, `sudo` with a `hidden`/`none` console, empty native
+configurations, `remote-debug` without a connection, missing toolchain / tool
+fields and syntax errors. Validation runs on write and, debounced, while you
+type; it never starts a process.
+
+For native configurations the editor shows, at the end of the line, what the
+`target` resolves to (the executable, *target not built yet* or *target not
+found*).
+
+### Schemas and jsonls
+
+`schemas/*.schema.json` describe the four files. When `jsonls`
+(`vscode-json-language-server`, package `vscode-langservers-extracted`)
+attaches to a buffer inside `.orch/`, the schemas are added to its settings
+next to the ones you already configured, giving completion, hover text and
+structure checks. `:OrchLaunchCheck` reports whether it is installed, running
+and has the schemas.
+
+### Options
+
+```lua
+require("orchlaunch").setup({
+  jsonls = true,              -- register the schemas with jsonls
+  write_schema_ref = false,   -- add a "$schema" URL (raw GitHub) when writing
+  ui = {
+    backend = "buffer",       -- "buffer" | "fibrous"
+    edit = {
+      window = "split",       -- "split" | "vsplit" | "float" | "tab"
+      fold_others = false,    -- fold the other entries (this window only)
+    },
+    virtual_text = true,      -- show what a native target resolves to
+  },
+})
+```
+
+`ui.edit_window` and `ui.fold_others` are accepted as aliases.
+
+### The fibrous browser
+
+With `ui.backend = "fibrous"`, `:OrchLaunch` opens the Run/Debug Configurations
+browser with these keys:
 
 | Key | Action |
 | --- | --- |
@@ -300,11 +375,13 @@ Known limits: attaching to an existing PID may be blocked by
 
 | Command | Description |
 | --- | --- |
-| `:OrchLaunch` | Open the configurations browser |
+| `:OrchLaunch` | Pick and run a configuration (fibrous browser with `ui.backend = "fibrous"`) |
 | `:OrchLaunchSelect [name]` | Set the active configuration |
 | `:OrchLaunchRun [name]` | Run a configuration (active when omitted) |
 | `:OrchLaunchDebug [name]` | Debug a configuration (active when omitted) |
-| `:OrchLaunchEdit [name]` | Edit a run configuration |
+| `:OrchLaunchEdit [file [entry]]` | Edit a configuration file as a JSON buffer (see *UI*) |
+| `:OrchLaunchNew [type]` | Create a configuration, tool, toolchain or profile |
+| `:OrchLaunchRunHere` | Run the configuration under the cursor |
 | `:OrchLaunchToolchains` | Manage toolchains |
 | `:OrchLaunchExternalTools` | Manage external tools |
 | `:OrchLaunchExternalTool <name>` | Run an external tool |
