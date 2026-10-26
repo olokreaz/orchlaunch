@@ -18,13 +18,14 @@ local function get_schema_dir()
     return vim.fs.joinpath(get_plugin_root(), "schemas")
 end
 
-local function url_encode(path)
-    return path:gsub(" ", "%%20")
+--- file:// URL of a path, with every special character percent-encoded.
+---@param path string
+---@return string
+local function file_url(path)
+    return vim.uri_from_fname(vim.fs.normalize(path))
 end
 
-local function file_url(path)
-    return "file://" .. url_encode(vim.fs.normalize(path))
-end
+local jsonpos = require("orchlaunch.jsonpos")
 
 --- Returns the schema mappings for jsonls.
 --- Each mapping has fileMatch patterns and a file:// URL to the schema.
@@ -62,14 +63,17 @@ function M.github_urls()
     }
 end
 
---- Checks if a buffer path is inside a .orch directory.
+--- Checks if a buffer path is inside a `.orch` directory (not merely somewhere
+--- below a project that has one: a `package.json` or a user's own
+--- `toolchain.json` next to `.orch/` must be left alone).
 ---@param bufnr integer
 ---@return boolean
 local function is_orch_buffer(bufnr)
     local name = vim.api.nvim_buf_get_name(bufnr)
-    if name == "" then return false end
-    local dir = vim.fs.dirname(name)
-    return vim.fs.find(".orch", { path = dir, upward = true })[1] ~= nil
+    if name == "" then
+        return false
+    end
+    return vim.fs.normalize(name):find("/%.orch/") ~= nil
 end
 
 --- Gets the schema key for a buffer (run_configurations, external_tools, etc.)
@@ -114,109 +118,151 @@ local function merge_schemas(existing, new)
     return result
 end
 
---- Applies schema configuration to a jsonls client.
+--- Sends a notification to a client (`client:notify` since Neovim 0.11, the
+--- dot form before).
+---@param client vim.lsp.Client
+---@param method string
+---@param params table
+local function notify_client(client, method, params)
+    if vim.fn.has("nvim-0.11") == 1 then
+        client:notify(method, params)
+    else
+        client.notify(method, params)
+    end
+end
+
+--- Registers the OrchLaunch schemas with a jsonls client, keeping every schema
+--- the user already configured, and tells the server.
 ---@param client vim.lsp.Client
 ---@param mappings table[]
 local function apply_schemas_to_client(client, mappings)
     local settings = client.config.settings
-    if not settings then
+    if type(settings) ~= "table" then
         settings = {}
         client.config.settings = settings
     end
-    if not settings.json then
-        settings.json = {}
-    end
-    if not settings.json.schemas then
-        settings.json.schemas = {}
+    settings.json = type(settings.json) == "table" and settings.json or {}
+    settings.json.schemas = merge_schemas(settings.json.schemas or {}, mappings)
+
+    -- Neovim >= 0.11 answers workspace/configuration pulls from `client.settings`
+    -- (not always the same table as `client.config.settings`).
+    if type(client.settings) == "table" and client.settings ~= settings then
+        client.settings.json = type(client.settings.json) == "table" and client.settings.json or {}
+        client.settings.json.schemas = merge_schemas(client.settings.json.schemas or {}, mappings)
     end
 
-    settings.json.schemas = merge_schemas(settings.json.schemas, mappings)
+    notify_client(client, "workspace/didChangeConfiguration", { settings = settings })
+end
 
-    -- Notify the client of the configuration change
-    client.notify("workspace/didChangeConfiguration", { settings = settings })
+---@param client vim.lsp.Client
+---@return boolean
+local function is_jsonls(client)
+    local name = client.name:lower()
+    return name == "jsonls" or name == "json-lsp"
+end
+
+--- Adds (or corrects) the `$schema` member of a document in a buffer with a
+--- minimal text edit, so formatting, key order, undo history and folds survive.
+---@param bufnr integer
+---@param url string
+local function ensure_schema_ref(bufnr, url)
+    local root = jsonpos.parse_buffer(bufnr)
+    if not root or root.kind ~= "object" then
+        return
+    end
+
+    local member = jsonpos.member(root, "$schema")
+    if member then
+        local value = member.value
+        if value.kind == "string" and value.value == url then
+            return
+        end
+        if value.line == value.end_line then
+            vim.api.nvim_buf_set_text(bufnr, value.line, value.col, value.end_line, value.end_col, { vim.json.encode(url) })
+        end
+        return
+    end
+
+    local literal = vim.json.encode("$schema") .. ": " .. vim.json.encode(url)
+    if #root.members == 0 then
+        vim.api.nvim_buf_set_text(bufnr, root.line, root.col, root.end_line, root.end_col, { "{ " .. literal .. " }" })
+        return
+    end
+
+    -- Insert after the opening brace: on its own line, indented like the first member.
+    local first = root.members[1]
+    local lines = vim.api.nvim_buf_get_lines(bufnr, first.key_line, first.key_line + 1, false)
+    if first.key_line > root.line then
+        local indent = (lines[1] or ""):sub(1, first.key_col)
+        vim.api.nvim_buf_set_text(bufnr, root.line, root.col + 1, root.line, root.col + 1, { "", indent .. literal .. "," })
+    else
+        -- one-line document: `{ "a": 1 }` -> `{ "$schema": "...", "a": 1 }`
+        vim.api.nvim_buf_set_text(bufnr, first.key_line, first.key_col, first.key_line, first.key_col, { literal .. ", " })
+    end
 end
 
 --- Sets up automatic schema registration for jsonls.
+---
+--- Safe to call repeatedly: the previous registration is replaced, so changing
+--- `jsonls` / `write_schema_ref` between calls takes effect.
 ---@param opts? { jsonls?: boolean, write_schema_ref?: boolean }
 function M.setup(opts)
     opts = opts or {}
     local jsonls_enabled = opts.jsonls ~= false
     local write_schema_ref = opts.write_schema_ref == true
 
-    if not jsonls_enabled then
-        return
-    end
-
+    -- Always (re)create the group first so a later setup() with the features
+    -- turned off removes the old autocommands.
     local group = vim.api.nvim_create_augroup("OrchLaunchSchemas", { clear = true })
 
-    -- When jsonls attaches to a buffer in .orch/, register our schemas
-    vim.api.nvim_create_autocmd("LspAttach", {
-        group = group,
-        callback = function(args)
-            local client = vim.lsp.get_client_by_id(args.data.client_id)
-            if not client then return end
-
-            -- Check if this is jsonls (could be named jsonls, json-lsp, etc.)
-            local name = client.name:lower()
-            if name ~= "jsonls" and name ~= "json-lsp" then
-                return
-            end
-
-            -- Only apply to buffers in .orch directories
-            if not is_orch_buffer(args.buf) then
-                return
-            end
-
-            apply_schemas_to_client(client, M.mappings())
-        end,
-    })
-
-    -- Also handle case where buffer is already open when jsonls starts
-    vim.api.nvim_create_autocmd("FileType", {
-        group = group,
-        pattern = "json",
-        callback = function(args)
-            if not is_orch_buffer(args.buf) then return end
-
-            -- Check existing clients
-            for _, client in pairs(vim.lsp.get_clients({ bufnr = args.buf })) do
-                local name = client.name:lower()
-                if name == "jsonls" or name == "json-lsp" then
-                    apply_schemas_to_client(client, M.mappings())
-                    break
+    if jsonls_enabled then
+        -- When jsonls attaches to a buffer in .orch/, register our schemas
+        vim.api.nvim_create_autocmd("LspAttach", {
+            group = group,
+            callback = function(args)
+                local client = args.data and vim.lsp.get_client_by_id(args.data.client_id)
+                if not client or not is_jsonls(client) then
+                    return
                 end
-            end
-        end,
-    })
+                -- Only apply to buffers in .orch directories
+                if not is_orch_buffer(args.buf) then
+                    return
+                end
+                apply_schemas_to_client(client, M.mappings())
+            end,
+        })
+
+        -- jsonls was already running when an .orch buffer was opened
+        vim.api.nvim_create_autocmd("FileType", {
+            group = group,
+            pattern = "json",
+            callback = function(args)
+                if not is_orch_buffer(args.buf) then
+                    return
+                end
+                for _, client in pairs(vim.lsp.get_clients({ bufnr = args.buf })) do
+                    if is_jsonls(client) then
+                        apply_schemas_to_client(client, M.mappings())
+                        break
+                    end
+                end
+            end,
+        })
+    end
 
     -- Write $schema reference when saving .orch files (if enabled)
     if write_schema_ref then
         vim.api.nvim_create_autocmd("BufWritePre", {
             group = group,
             callback = function(args)
-                if not is_orch_buffer(args.buf) then return end
-                local key = get_schema_key(args.buf)
-                if not key then return end
-
-                local urls = M.github_urls()
-                local url = urls[key]
-                if not url then return end
-
-                local lines = vim.api.nvim_buf_get_lines(args.buf, 0, -1, false)
-                local content = table.concat(lines, "\n")
-                local ok, parsed = pcall(vim.json.decode, content)
-                if not ok or type(parsed) ~= "table" then return end
-
-                if parsed["$schema"] == url then return end
-
-                parsed["$schema"] = url
-                local new_content = vim.json.encode(parsed)
-                -- Pretty-print with indentation
-                local formatted = vim.fn.system("jq . 2>/dev/null", new_content)
-                if vim.v.shell_error ~= 0 then
-                    formatted = new_content
+                if not is_orch_buffer(args.buf) then
+                    return
                 end
-                vim.api.nvim_buf_set_lines(args.buf, 0, -1, false, vim.split(formatted, "\n"))
+                local key = get_schema_key(args.buf)
+                local url = key and M.github_urls()[key]
+                if url then
+                    ensure_schema_ref(args.buf, url)
+                end
             end,
         })
     end
@@ -227,13 +273,18 @@ end
 function M.check_info()
     local info = {
         jsonls_found = false,
+        jsonls_installed = vim.fn.executable("vscode-json-language-server") == 1,
         jsonls_clients = {},
         schemas_registered = false,
     }
 
+    local ours = {}
+    for _, mapping in ipairs(M.mappings()) do
+        ours[mapping.url] = true
+    end
+
     for _, client in pairs(vim.lsp.get_clients()) do
-        local name = client.name:lower()
-        if name == "jsonls" or name == "json-lsp" then
+        if is_jsonls(client) then
             info.jsonls_found = true
             info.jsonls_clients[#info.jsonls_clients + 1] = {
                 name = client.name,
@@ -241,11 +292,10 @@ function M.check_info()
                 root_dir = client.config.root_dir,
             }
 
-            -- Check if our schemas are registered
             local settings = client.config.settings
-            if settings and settings.json and settings.json.schemas then
-                for _, schema in ipairs(settings.json.schemas) do
-                    if schema.url and schema.url:match("orchlaunch") then
+            if type(settings) == "table" and type(settings.json) == "table" then
+                for _, schema in ipairs(settings.json.schemas or {}) do
+                    if schema.url and ours[schema.url] then
                         info.schemas_registered = true
                         break
                     end

@@ -422,7 +422,11 @@ function M.register()
                 info.schemas_registered and "registered" or "not registered"
             ))
         else
-            notify("jsonls: not found (install vscode-langservers-extracted)", WARN)
+            if info.jsonls_installed then
+                notify("jsonls: installed but not running (schemas apply once it attaches to a .orch buffer)")
+            else
+                notify("jsonls: not found (install vscode-langservers-extracted)", WARN)
+            end
         end
         if preflight.ok() then
             notify("environment looks ready")
@@ -441,7 +445,10 @@ function M.register()
             require("orchlaunch.ui.dialogs.toolchains").open()
         else
             require("orchlaunch.select").select_toolchain({
-                on_select = function(tc) vim.notify("Selected toolchain: " .. tc.name) end
+                prompt = "Edit which toolchain?",
+                on_select = function(tc)
+                    require("orchlaunch").edit("toolchain", tc.name)
+                end,
             })
         end
     end
@@ -452,7 +459,10 @@ function M.register()
             require("orchlaunch.ui.dialogs.external_tools").open()
         else
             require("orchlaunch.select").select_external_tool({
-                on_select = function(t) vim.notify("Selected tool: " .. t.name) end
+                prompt = "Edit which external tool?",
+                on_select = function(t)
+                    require("orchlaunch").edit("external_tools", t.name)
+                end,
             })
         end
     end
@@ -478,7 +488,10 @@ function M.register()
             require("orchlaunch.ui.fibrous.cmake_profiles").open()
         else
             require("orchlaunch.select").select_cmake_profile({
-                on_select = function(p) vim.notify("Selected profile: " .. p.name) end
+                prompt = "Edit which CMake profile?",
+                on_select = function(p)
+                    require("orchlaunch").edit("cmake_settings", p.name)
+                end,
             })
         end
     end, { desc = "Manage CMake profiles" })
@@ -633,7 +646,17 @@ function M.register()
         if kind ~= "configure" and kind ~= "build" then kind = "all" end
         require("orchlaunch.select").select_cmake_profile({
             kind = kind,
-            on_select = function(p) vim.notify("Selected profile: " .. p.name) end
+            prompt = "Activate which CMake profile?",
+            on_select = function(p)
+                local state = require("orchlaunch.state")
+                local ok, err = pcall(state.set_active_cmake_profile, p.name)
+                if not ok then
+                    notify(tostring(err):gsub("^%[orchlaunch%]%s*", ""), ERROR)
+                    return
+                end
+                state.save()
+                notify(("active CMake profile: %s"):format(p.name))
+            end,
         })
     end, {
         nargs = "?",
@@ -647,7 +670,22 @@ function M.register()
         if kind ~= "configure" and kind ~= "build" then kind = "configure" end
         require("orchlaunch.select").select_cmake_preset({
             kind = kind,
-            on_select = function(p) vim.notify("Selected preset: " .. p.name) end
+            on_select = function(p)
+                local state = require("orchlaunch.state")
+                local key = kind == "build" and "build_preset" or "configure_preset"
+                for _, profile in ipairs(state.cmake_profiles()) do
+                    if profile[key] == p.name then
+                        state.set_active_cmake_profile(profile.name)
+                        state.save()
+                        notify(("active CMake profile: %s (%s preset %s)"):format(profile.name, kind, p.name))
+                        return
+                    end
+                end
+                notify(
+                    ("no profile uses the %s preset %q; run :OrchLaunchImportCMakePresets first"):format(kind, p.name),
+                    WARN
+                )
+            end,
         })
     end, {
         nargs = "?",
@@ -658,53 +696,47 @@ function M.register()
     vim.api.nvim_create_user_command("OrchLaunchSelectTool", function()
         if not ensure_loaded() then return end
         require("orchlaunch.select").select_external_tool({
-            on_select = function(t) vim.notify("Selected tool: " .. t.name) end
+            prompt = "Run which external tool?",
+            on_select = function(t)
+                require("orchlaunch.runner").run_external_tool_async(t.name)
+            end,
         })
-    end, { desc = "Select an external tool" })
+    end, { desc = "Select and run an external tool" })
 
     -- Run here (from buffer)
     vim.api.nvim_create_user_command("OrchLaunchRunHere", function()
+        if not ensure_loaded() then return end
         local bufnr = vim.api.nvim_get_current_buf()
         local filename = vim.fs.basename(vim.api.nvim_buf_get_name(bufnr))
         if filename ~= "run_configurations.json" then
             notify("OrchLaunchRunHere only works in run_configurations.json", WARN)
             return
         end
+
+        local jsonpos = require("orchlaunch.jsonpos")
+        local root, err = jsonpos.parse_buffer(bufnr)
+        if not root then
+            notify("run_configurations.json is not valid JSON: " .. tostring(err), ERROR)
+            return
+        end
+
+        local list = jsonpos.get(root, "configurations")
         local line = vim.api.nvim_win_get_cursor(0)[1] - 1
-        -- Find configuration at cursor
-        local validate = require("orchlaunch.validate")
-        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-        local configs = {}
-        local in_configs = false
-        local brace_depth = 0
-        local current = {}
-        for i, line_text in ipairs(lines) do
-            if line_text:match('"configurations"%s*:%s*%[') then in_configs = true end
-            if in_configs then
-                for _, ch in ipairs(vim.fn.split(line_text, "")) do
-                    if ch == "{" then
-                        if brace_depth == 1 then current = { start_line = i - 1 } end
-                        brace_depth = brace_depth + 1
-                    elseif ch == "}" then
-                        brace_depth = brace_depth - 1
-                        if brace_depth == 1 then
-                            current.end_line = i - 1
-                            if current.start_line <= line and current.end_line >= line then
-                                if current.name then
-                                    require("orchlaunch.runner").run(current.name, { mode = "run", async = true })
-                                end
-                                return
-                            end
-                            current = {}
-                        end
-                    end
+        for _, item in ipairs(list and list.kind == "array" and list.items or {}) do
+            if item.kind == "object" and item.line <= line and line <= item.end_line then
+                local name = jsonpos.get_string(item, "name")
+                if not name then
+                    notify("the configuration under the cursor has no name", WARN)
+                    return
                 end
-                if brace_depth >= 2 then
-                    local key, val = line_text:match('"(%w+)"%s*:%s*"([^"]*)"')
-                    if key and val then current[key] = val end
+                if vim.bo[bufnr].modified then
+                    notify("the buffer has unsaved changes; running the saved version of " .. name, WARN)
                 end
+                require("orchlaunch.runner").run(name, { mode = "run", async = true })
+                return
             end
         end
+        notify("the cursor is not inside a configuration", WARN)
     end, { desc = "Run the configuration under the cursor in run_configurations.json" })
 
 end

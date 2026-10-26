@@ -206,7 +206,7 @@ function M.select_cmake_profile(opts)
     vim.ui.select(items, {
         prompt = opts.prompt or "Select CMake profile:",
         format_item = function(item)
-            local parts = { item.marker .. item.name, "[" .. item.kind .. "]" }
+            local parts = { item.marker .. item.name, "[" .. (item.kind or "profile") .. "]" }
             if item.configure_preset then parts[#parts + 1] = "configure=" .. item.configure_preset end
             if item.build_preset then parts[#parts + 1] = "build=" .. item.build_preset end
             if item.toolchain then parts[#parts + 1] = "tc=" .. item.toolchain end
@@ -264,6 +264,7 @@ function M.select_cmake_preset(opts)
         vim.notify("[orchlaunch] no .orch project loaded", vim.log.levels.WARN)
         return
     end
+    opts.kind = opts.kind or "configure"
 
     local presets = state.presets()
     if not presets or not presets[opts.kind] or #presets[opts.kind] == 0 then

@@ -181,6 +181,25 @@ function M.stringify(data)
     return encode_json(data, "") .. "\n"
 end
 
+--- Adds the `$schema` reference (option `write_schema_ref`) to a document
+--- destined for one of the OrchLaunch files. Returns `data` untouched when the
+--- option is off, the file is not one of ours, or the key already exists.
+---@param path string
+---@param data any
+---@return any
+function M.with_schema_ref(path, data)
+    local ok, options = pcall(require, "orchlaunch.options")
+    if not ok or not options.get().write_schema_ref or type(data) ~= "table" or data["$schema"] ~= nil then
+        return data
+    end
+    local key = vim.fs.basename(path):gsub("%.json$", "")
+    local url = require("orchlaunch.schemas").github_urls()[key]
+    if not url then
+        return data
+    end
+    return vim.tbl_extend("force", {}, data, { ["$schema"] = url })
+end
+
 --- Writes a Lua table atomically to a JSON file.
 ---
 --- The document is written to a sibling temporary file and renamed over the
@@ -190,6 +209,7 @@ end
 ---@return boolean ok
 ---@return string? error
 function M.save(path, data)
+    data = M.with_schema_ref(path, data)
     local parent = vim.fs.dirname(path)
     if parent and parent ~= "" and vim.fn.isdirectory(parent) == 0 then
         vim.fn.mkdir(parent, "p")
