@@ -16,12 +16,71 @@ local ERROR = vim.log.levels.ERROR
 ---@class EditOptions
 ---@field window? "split" | "vsplit" | "float" | "tab"
 ---@field fold_others? boolean
+---@field close_on_write? boolean
 ---@field whole_file? boolean Open the file directly, without the entry picker.
+
+--- Floating editor windows opened by this module, keyed by buffer number.
+---@type table<integer, integer>
+local float_windows = {}
 
 --- Returns the configured edit options (see `orchlaunch.options`).
 ---@return EditOptions
 local function get_edit_opts()
     return vim.deepcopy(require("orchlaunch.options").get().ui.edit)
+end
+
+--- Returns true when `win` is one of our floating editor windows.
+---@param win integer
+---@param bufnr integer
+---@return boolean
+local function is_managed_float(win, bufnr)
+    return float_windows[bufnr] == win
+        and vim.api.nvim_win_is_valid(win)
+        and vim.api.nvim_win_get_config(win).relative ~= ""
+end
+
+--- Closes the floating editor showing `bufnr`, if it is still open.
+---@param bufnr? integer
+---@return boolean closed
+function M.close_float(bufnr)
+    bufnr = bufnr or vim.api.nvim_get_current_buf()
+    local win = float_windows[bufnr]
+    if not win or not vim.api.nvim_win_is_valid(win) then
+        float_windows[bufnr] = nil
+        return false
+    end
+    if vim.bo[bufnr].modified then
+        vim.notify("[orchlaunch] unsaved changes; use :wq to save and close", WARN)
+        return false
+    end
+    float_windows[bufnr] = nil
+    vim.api.nvim_win_close(win, false)
+    return true
+end
+
+--- Installs `q`/`<Esc>` close keys for a floating editor buffer. Outside the
+--- float the keys fall through to their normal meaning (e.g. `q` macros).
+---@param bufnr integer
+local function set_float_close_keys(bufnr)
+    for _, lhs in ipairs({ "q", "<Esc>" }) do
+        vim.keymap.set("n", lhs, function()
+            if is_managed_float(vim.api.nvim_get_current_win(), bufnr) then
+                -- Window changes are not allowed while a mapping is running.
+                vim.schedule(function()
+                    M.close_float(bufnr)
+                end)
+                return ""
+            end
+            return lhs
+        end, {
+            buffer = bufnr,
+            expr = true,
+            replace_keycodes = true,
+            nowait = true,
+            silent = true,
+            desc = "Close the OrchLaunch editor",
+        })
+    end
 end
 
 --- Opens a file in the configured window style.
@@ -49,7 +108,7 @@ local function open_file_window(path, opts)
         local height = math.floor(vim.o.lines * 0.8)
         local row = math.floor((vim.o.lines - height) / 2)
         local col = math.floor((vim.o.columns - width) / 2)
-        vim.api.nvim_open_win(bufnr, true, {
+        local win = vim.api.nvim_open_win(bufnr, true, {
             relative = "editor",
             width = width,
             height = height,
@@ -58,6 +117,8 @@ local function open_file_window(path, opts)
             style = "minimal",
             border = "rounded",
         })
+        float_windows[bufnr] = win
+        set_float_close_keys(bufnr)
         return bufnr
     else
         vim.cmd(cmd .. " " .. vim.fn.fnameescape(path))
@@ -578,6 +639,25 @@ function M.setup_autocmds()
             M.validate_buffer(args.buf)
             if vim.fs.basename(args.file) == "run_configurations.json" then
                 M.show_virtual_text(args.buf)
+            end
+            -- Floating editors behave like a form: saving closes them.
+            if require("orchlaunch.options").get().ui.edit.close_on_write then
+                vim.schedule(function()
+                    M.close_float(args.buf)
+                end)
+            end
+        end,
+    })
+
+    -- Forget a floating window once it is closed by any means.
+    vim.api.nvim_create_autocmd("WinClosed", {
+        group = group,
+        callback = function(args)
+            local closed = tonumber(args.match)
+            for bufnr, win in pairs(float_windows) do
+                if win == closed then
+                    float_windows[bufnr] = nil
+                end
             end
         end,
     })

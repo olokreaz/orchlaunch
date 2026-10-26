@@ -112,8 +112,9 @@ require("orchlaunch").setup({
   ui = {
     backend = "buffer",  -- "buffer" (default) or "fibrous"
     edit = {
-      window = "split",  -- "split" | "vsplit" | "float" | "tab"
+      window = "float",  -- "split" | "vsplit" | "float" | "tab"
       fold_others = false,
+      close_on_write = true, -- floats close themselves after :w
     },
     virtual_text = true, -- show resolved executable path in run_configurations.json
   },
@@ -345,12 +346,12 @@ reads back target names, types and artifact paths.
 
 The new default UI edits configuration files as plain JSON buffers:
 
-- **`:OrchLaunchEdit [configs|tools|toolchain|cmake|breakpoints]`** — opens the file in a split. Without arguments, prompts which file. With a file type, opens that file; you can then pick a specific entry (e.g. a configuration name) to jump to it.
+- **`:OrchLaunchEdit [configs|tools|toolchain|cmake|breakpoints]`** — opens the file in a floating window (`ui.edit.window`). Without arguments, prompts which file. With a file type, opens that file; you can then pick a specific entry (e.g. a configuration name) to jump to it.
 - **`:OrchLaunchNew [native|remote-debug|compound|external_tool|toolchain|cmake_profile]`** — creates a new entry with sensible defaults, saves it, and opens the file at the new entry.
 - **JSON Schema** — autocompletion and validation via `jsonls`.
 - **Semantic validation** — OrchLaunch adds its own diagnostics (via `vim.diagnostic`) for things JSON Schema can't express: unknown CMake targets, missing toolchains, compound cycles, duplicate names, sudo with hidden/none console, etc.
 - **Virtual text** — in `run_configurations.json`, native configurations show the resolved executable path as virtual text at the end of the line (toggle with `ui.virtual_text`).
-- **Window style** — `ui.edit.window = "split" | "vsplit" | "float" | "tab"`.
+- **Window style** — `ui.edit.window = "split" | "vsplit" | "float" | "tab"` (default `float`). Floating editors close on `:w` (`ui.edit.close_on_write`, default on) and with `q`/`<Esc>`; set `close_on_write = false` to keep them open.
 
 ### New Commands
 

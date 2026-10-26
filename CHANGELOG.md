@@ -40,6 +40,11 @@ tagged yet; the entries below describe the current, unreleased state.
 
 ### Added
 
+- **Floating editor by default** — `:OrchLaunchEdit`/`:OrchLaunchNew` now open
+  the JSON file in a centered floating window (`ui.edit.window = "float"`).
+  Floating editors behave like a form: `:w` saves and closes the window
+  (`ui.edit.close_on_write`, default on), `q`/`<Esc>` close it, and unsaved
+  changes are protected.
 - **JSON Schema & Language Server Integration** — Ships draft-07 schemas for all
   `.orch/*.json` files (`schemas/`). Auto-registers with `jsonls`
   (vscode-json-language-server) on `LspAttach` for autocompletion, hover docs,

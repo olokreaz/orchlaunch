@@ -16,7 +16,8 @@ local root = h.tempdir()
 
 orch.setup({ root = root, silent = true })
 h.eq("defaults: backend is buffer", options.get().ui.backend, "buffer")
-h.eq("defaults: window is split", options.get().ui.edit.window, "split")
+h.eq("defaults: window is float", options.get().ui.edit.window, "float")
+h.eq("defaults: close_on_write on", options.get().ui.edit.close_on_write, true)
 h.eq("defaults: virtual text on", options.get().ui.virtual_text, true)
 h.eq("defaults: jsonls on", options.get().jsonls, true)
 h.eq("defaults: write_schema_ref off", options.get().write_schema_ref, false)
@@ -49,7 +50,7 @@ h.ok("invalid options do not raise", function()
     orch.setup({ root = root, silent = true, ui = { backend = "nope", edit = { window = "sideways" } } })
 end)
 h.eq("invalid backend falls back", options.get().ui.backend, "buffer")
-h.eq("invalid window falls back", options.get().ui.edit.window, "split")
+h.eq("invalid window falls back", options.get().ui.edit.window, "float")
 local warned = 0
 for _, m in ipairs(messages) do
     if m:find("unknown ui", 1, true) then

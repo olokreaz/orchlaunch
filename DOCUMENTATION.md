@@ -311,8 +311,9 @@ require("orchlaunch").setup({
   ui = {
     backend = "buffer",       -- "buffer" | "fibrous"
     edit = {
-      window = "split",       -- "split" | "vsplit" | "float" | "tab"
+      window = "float",       -- "split" | "vsplit" | "float" | "tab"
       fold_others = false,    -- fold the other entries (this window only)
+      close_on_write = true,  -- floating editors close after :w
     },
     virtual_text = true,      -- show what a native target resolves to
   },
@@ -320,6 +321,10 @@ require("orchlaunch").setup({
 ```
 
 `ui.edit_window` and `ui.fold_others` are accepted as aliases.
+
+Floating editors (the default) behave like a form: `:w` saves and closes the
+window, `q`/`<Esc>` close it (unsaved changes are protected), and
+`close_on_write = false` keeps it open after saving.
 
 ### The fibrous browser
 

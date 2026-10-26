@@ -9,6 +9,7 @@ local M = {}
 ---@class OrchUiEditOptions
 ---@field window "split" | "vsplit" | "float" | "tab"
 ---@field fold_others boolean
+---@field close_on_write boolean
 
 ---@class OrchUiOptions
 ---@field backend "buffer" | "fibrous"
@@ -29,7 +30,7 @@ local function defaults()
         write_schema_ref = false,
         ui = {
             backend = "buffer",
-            edit = { window = "split", fold_others = false },
+            edit = { window = "float", fold_others = false, close_on_write = true },
             virtual_text = true,
         },
     }
@@ -71,12 +72,13 @@ function M.setup(opts)
     end
     if not WINDOWS[ui.edit.window] then
         vim.notify(
-            ("[orchlaunch] unknown ui.edit window %q; using \"split\""):format(tostring(ui.edit.window)),
+            ("[orchlaunch] unknown ui.edit window %q; using \"float\""):format(tostring(ui.edit.window)),
             vim.log.levels.WARN
         )
-        ui.edit.window = "split"
+        ui.edit.window = "float"
     end
     ui.edit.fold_others = ui.edit.fold_others == true
+    ui.edit.close_on_write = ui.edit.close_on_write ~= false
     ui.virtual_text = ui.virtual_text ~= false
     merged.ui = ui
     merged.jsonls = merged.jsonls ~= false
