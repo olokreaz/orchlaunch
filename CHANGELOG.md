@@ -99,6 +99,13 @@ tagged yet; the entries below describe the current, unreleased state.
 
 ### Fixed
 
+- Fixed a crash when running a native configuration with the buffer UI:
+  the async launch path called `open_terminal` before its local definition,
+  raising "attempt to call global 'open_terminal' (a nil value)".
+- Fixed a crash on `BufWritePost` for `.orch/*.json` buffers where
+  `is_orch_buffer` was referenced before its local definition.
+- `:OrchLaunchEdit <file_type> <entry>` now parses the second argument instead
+  of falling back to the file picker.
 - Fixed various issues with schema enum drift detection and validation
   position finding.
 
