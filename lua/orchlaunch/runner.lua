@@ -63,6 +63,10 @@ end
 local active_job = nil
 local active_label = nil
 
+--- Defined below; forward-declared because async launch paths use it.
+---@type fun(spec: OrchProcessSpec, console: OrchConsole)
+local open_terminal
+
 --- Reports a completed CMake step in the quickfix list.
 ---@param label string
 ---@param spec OrchProcessSpec
