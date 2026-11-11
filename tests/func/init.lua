@@ -17,6 +17,10 @@
 -- current buffer/window, whether the field <Tab> map is present there, and the
 -- field count. Handy when a keystroke behaves differently in the terminal.
 
+local source = debug.getinfo(1, "S").source:sub(2)
+local func_dir = vim.fn.fnamemodify(source, ":p:h")
+dofile(func_dir .. "/../minimal_init.lua")
+
 local plugin = assert(vim.env.ORCH_FUNC_PLUGIN, "ORCH_FUNC_PLUGIN is not set")
 local deps = vim.env.ORCH_FUNC_DEPS
 local root = vim.env.ORCH_FUNC_ROOT or vim.fn.getcwd()

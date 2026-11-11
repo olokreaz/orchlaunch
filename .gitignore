@@ -13,5 +13,8 @@ doc/tags
 .vscode/
 
 # Test artifacts
-tests/fixtures/
+/tests/fixtures/*
+!/tests/fixtures/native-debug/
+!/tests/fixtures/native-debug/**
+/build/orchlaunch-stage0/
 schemas/
