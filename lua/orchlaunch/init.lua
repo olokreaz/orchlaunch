@@ -67,8 +67,8 @@ local function install_autocmds()
     })
 
     local function reload_if_changed()
-        if state.is_loaded() then
-            state.reload_if_changed()
+        if state.is_loaded() and state.reload_if_changed() then
+            require("orchlaunch.breakpoints").load()
         end
     end
 

@@ -78,6 +78,26 @@ h.check(
 h.write(run_path, original)
 state.reload()
 
+-- JSON objects are Lua tables too; each persisted list must reject a non-empty
+-- object instead of silently treating it as an empty array via ipairs().
+for _, case in ipairs({
+    { key = "run_configurations", path = paths.run_configurations, field = "configurations", item = '{"name":"Wrong"}' },
+    { key = "external_tools", path = paths.external_tools, field = "tools", item = '{"name":"Wrong"}' },
+    { key = "toolchain", path = paths.toolchain, field = "toolchains", item = '{"name":"Wrong"}' },
+    { key = "breakpoints", path = paths.breakpoints, field = "breakpoints", item = '{"file":"prog.cpp","line":1}' },
+}) do
+    local saved_text = h.read(case.path)
+    h.write(case.path, ('{"%s":{"unexpected":%s}}'):format(case.field, case.item))
+    local invalid_ok = pcall(state.reload)
+    h.check(case.key .. " rejects an object where a list is required", not invalid_ok)
+    h.check(case.key .. " invalid reload keeps old state", state.configuration("Keep") ~= nil)
+    local save_ok = state.save()
+    h.check(case.key .. " malformed document cannot be overwritten", save_ok == false)
+    h.contains(case.key .. " malformed file remains unchanged", h.read(case.path), '"unexpected"')
+    h.write(case.path, saved_text)
+    state.reload()
+end
+
 local hand = vim.json.decode(original)
 hand["$schema"] = "https://example.invalid/orch.schema.json"
 hand.extra = { owner = "hand" }

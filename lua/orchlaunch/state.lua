@@ -25,6 +25,12 @@ end
 
 local last_reported_error = nil
 
+---@param value any
+---@return boolean
+local function is_list(value)
+    return type(value) == "table" and (next(value) == nil or vim.islist(value))
+end
+
 --- Shows a load/save error once per identical message, so DirChanged and
 --- focus events do not turn one malformed file into a notification storm.
 ---@param message string
@@ -45,7 +51,7 @@ local function load_run_configurations(path)
         return nil, err
     end
     local list = raw.configurations or raw.configuration or {}
-    if type(list) ~= "table" then
+    if not is_list(list) then
         return nil, ("%s: `configurations` must be a list"):format(path)
     end
     for index, item in ipairs(list) do
@@ -68,7 +74,7 @@ local function load_external_tools(path)
         return nil, err
     end
     local list = raw.tools or raw.tool or {}
-    if type(list) ~= "table" then
+    if not is_list(list) then
         return nil, ("%s: `tools` must be a list"):format(path)
     end
     for index, item in ipairs(list) do
@@ -91,7 +97,7 @@ local function load_toolchains(path)
         return nil, err
     end
     local list = raw.toolchains or raw.toolchain or {}
-    if type(list) ~= "table" then
+    if not is_list(list) then
         return nil, ("%s: `toolchains` must be a list"):format(path)
     end
     for index, item in ipairs(list) do
@@ -169,7 +175,7 @@ local function load_breakpoints(path)
         return nil, err
     end
     local list = raw.breakpoints or {}
-    if type(list) ~= "table" then
+    if not is_list(list) then
         return nil, ("%s: `breakpoints` must be a list"):format(path)
     end
     for index, record in ipairs(list) do

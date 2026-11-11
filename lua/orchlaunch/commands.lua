@@ -162,6 +162,7 @@ function M.register()
             return
         end
         state.reload()
+        require("orchlaunch.breakpoints").load()
         notify("configuration reloaded")
     end, { desc = "Reload the .orch configuration" })
 
@@ -170,7 +171,22 @@ function M.register()
     -- =========================================================================
 
     vim.api.nvim_create_user_command("OrchLaunchSelect", function(args)
-        if not ensure_loaded() then return end
+        local state = ensure_loaded()
+        if not state then return end
+        local name = vim.trim(args.args)
+        if name ~= "" then
+            if not state.configuration(name) then
+                notify(("run configuration not found: %s"):format(name), WARN)
+                return
+            end
+            local ok, err = require("orchlaunch.active").set(state.root(), name)
+            if not ok then
+                notify(tostring(err), ERROR)
+                return
+            end
+            notify("active configuration: " .. name)
+            return
+        end
         require("orchlaunch.select").select_active()
     end, {
         nargs = "?",
@@ -707,8 +723,9 @@ function M.register()
     vim.api.nvim_create_user_command("OrchLaunchRunHere", function()
         if not ensure_loaded() then return end
         local bufnr = vim.api.nvim_get_current_buf()
-        local filename = vim.fs.basename(vim.api.nvim_buf_get_name(bufnr))
-        if filename ~= "run_configurations.json" then
+        local filename = vim.fs.normalize(vim.api.nvim_buf_get_name(bufnr))
+        local state = require("orchlaunch.state")
+        if filename ~= vim.fs.normalize(state.get().paths.run_configurations) then
             notify("OrchLaunchRunHere only works in run_configurations.json", WARN)
             return
         end

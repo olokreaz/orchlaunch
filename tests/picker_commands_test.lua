@@ -79,6 +79,26 @@ local doc = table.concat({
 local runs_path = root .. "/.orch/run_configurations.json"
 h.write(runs_path, doc)
 vim.cmd("OrchLaunchReload")
+
+-- ---- :OrchLaunchSelect [name] -------------------------------------------------
+reset()
+vim.cmd("OrchLaunchSelect Two")
+h.eq("OrchLaunchSelect NAME stores that configuration", require("orchlaunch.active").get(root), "Two")
+h.check("OrchLaunchSelect NAME confirms the choice", saw("active configuration: Two"), vim.inspect(messages))
+h.eq("OrchLaunchSelect NAME does not open the picker", #calls, 0)
+reset()
+vim.cmd("OrchLaunchSelect Missing")
+h.check("OrchLaunchSelect rejects an unknown name", saw("run configuration not found: Missing", vim.log.levels.WARN), vim.inspect(messages))
+h.eq("unknown OrchLaunchSelect name leaves active choice unchanged", require("orchlaunch.active").get(root), "Two")
+reset()
+choose = function(items)
+    for i, item in ipairs(items) do
+        if item.name == "Three" then return i end
+    end
+end
+vim.cmd("OrchLaunchSelect")
+h.eq("OrchLaunchSelect without a name still opens the picker", #calls, 1)
+h.eq("picker selection still sets active configuration", require("orchlaunch.active").get(root), "Three")
 local _ = marker_config
 
 local function cursor_on(text)
@@ -121,6 +141,18 @@ h.write(root .. "/notes.json", "{}")
 vim.cmd("edit " .. vim.fn.fnameescape(root .. "/notes.json"))
 vim.cmd("OrchLaunchRunHere")
 h.check("other files are refused", saw("only works in run_configurations.json", vim.log.levels.WARN), vim.inspect(messages))
+
+reset()
+local lookalike_path = root .. "/elsewhere/run_configurations.json"
+vim.fn.mkdir(vim.fs.dirname(lookalike_path), "p")
+h.write(lookalike_path, doc)
+vim.cmd("edit " .. vim.fn.fnameescape(lookalike_path))
+vim.cmd("OrchLaunchRunHere")
+h.check(
+    "a different file with the same basename is refused",
+    saw("only works in run_configurations.json", vim.log.levels.WARN),
+    vim.inspect(messages)
+)
 
 reset()
 vim.cmd("edit " .. vim.fn.fnameescape(runs_path))

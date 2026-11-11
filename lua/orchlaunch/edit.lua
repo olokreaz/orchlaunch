@@ -633,8 +633,8 @@ function M.setup_autocmds()
         group = group,
         pattern = "*/.orch/*.json",
         callback = function(args)
-            if state.is_loaded() then
-                state.reload_if_changed()
+            if state.is_loaded() and state.reload_if_changed() then
+                require("orchlaunch.breakpoints").load()
             end
             M.validate_buffer(args.buf)
             if vim.fs.basename(args.file) == "run_configurations.json" then

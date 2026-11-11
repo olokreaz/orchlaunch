@@ -103,6 +103,22 @@ local restored = breakpoints.list()[1]
 h.eq("restored line", restored and restored.line, 3)
 h.eq("restored condition", restored and restored.condition, "i == 3")
 
+-- External edits to the persisted breakpoint document update nvim-dap's live
+-- breakpoint store after OrchLaunch notices the reload.
+orch.setup({ root = root, silent = true })
+local external = vim.json.encode({
+    breakpoints = {
+        { file = "prog.cpp", line = 2, condition = "i == 4", log_message = "external" },
+    },
+})
+h.write(record_file, external)
+vim.api.nvim_exec_autocmds("FocusGained", {})
+h.eq("external edit replaces the live breakpoints", #breakpoints.list(), 1)
+local external_bp = breakpoints.list()[1]
+h.eq("external edit updates live breakpoint line", external_bp and external_bp.line, 2)
+h.eq("external edit updates live breakpoint condition", external_bp and external_bp.condition, "i == 4")
+h.eq("external edit updates live breakpoint log message", external_bp and external_bp.log_message, "external")
+
 -- 5. clear ---------------------------------------------------------------------
 breakpoints.clear()
 h.eq("clear empties memory", #breakpoints.list(), 0)
