@@ -108,24 +108,29 @@ end
 ---@param label string
 ---@param on_done fun(result: OrchProcessResult)
 local function start_async(spec, label, on_done)
-    active_label = label
     local finished = false
+    local job
 
     local function finish(result)
         if finished then
             return
         end
         finished = true
-        active_job = nil
-        active_label = nil
+        if active_job == job then
+            active_job = nil
+            active_label = nil
+        end
         vim.schedule(function()
             on_done(result)
         end)
     end
 
     spec.timeout = spec.timeout or DEFAULT_TIMEOUT_MS
-    local job = process.start(spec, finish)
-    active_job = job
+    job = process.start(spec, finish)
+    if not finished then
+        active_job = job
+        active_label = label
+    end
 end
 
 --- Runs a CMake step asynchronously.
@@ -588,7 +593,12 @@ local function launch_native_async(name, mode, on_done)
         end
 
         local job
+        local finished = false
         job = process.start(spec, function(result)
+            if finished then
+                return
+            end
+            finished = true
             vim.schedule(function()
                 if active_job == job then
                     active_job = nil
@@ -599,8 +609,10 @@ local function launch_native_async(name, mode, on_done)
                 end
             end)
         end)
-        active_job = job
-        active_label = name
+        if not finished then
+            active_job = job
+            active_label = name
+        end
         on_done(true)
     end)
 end

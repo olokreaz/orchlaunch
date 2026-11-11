@@ -193,6 +193,29 @@ h.check("async build completion is delivered", vim.wait(3000, function()
 end), "callback timed out")
 h.eq("cancelled build reports failure", finish_ok, false)
 
+-- An earlier process finishing must not erase the cancel handle for a newer
+-- asynchronous step. The first job is short; configure is deliberately longer,
+-- so it is still running when the earlier callback is delivered.
+local slow_tool = script(fake_dir .. "/slow-tool", "sleep 0.2")
+local slow_tool_config = config.external_tool({ name = "Slow", program = slow_tool })
+state.add_external_tool(slow_tool_config)
+local first_finished = false
+runner.run_external_tool_async("Slow", function()
+    first_finished = true
+end)
+local configure_finished, configure_ok = false, nil
+runner.configure_async(function(ok)
+    configure_finished, configure_ok = true, ok
+end)
+h.check("overlapping earlier async job starts", vim.wait(1000, function()
+    return first_finished
+end), "external tool callback timed out")
+h.check("newer async configure remains cancellable", runner.cancel())
+h.check("cancelled newer configure completion is delivered", vim.wait(3000, function()
+    return configure_finished
+end), "configure callback timed out")
+h.eq("cancelled newer configure reports failure", configure_ok, false)
+
 -- ============================================================================
 -- Fibrous augroup isolation
 -- ============================================================================

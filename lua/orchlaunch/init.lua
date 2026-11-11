@@ -29,12 +29,14 @@ function M.load(root)
     local found, orch_dir = project.locate(root)
 
     if not found then
+        require("orchlaunch.breakpoints").clear_live()
         state.reset()
         return nil
     end
 
     local ok, loaded = pcall(state.setup, found, orch_dir)
     if not ok then
+        require("orchlaunch.breakpoints").clear_live()
         state.reset()
         local message = tostring(loaded):gsub("^%[orchlaunch%]%s*", "")
         state.report_error(message)

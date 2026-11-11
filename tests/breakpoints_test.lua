@@ -90,9 +90,32 @@ h.eq("one persisted record", #(raw.breakpoints or {}), 1)
 h.eq("persisted condition", raw.breakpoints and raw.breakpoints[1].condition, "i == 3")
 h.eq("persisted file is relative", raw.breakpoints and raw.breakpoints[1].file, "prog.cpp")
 
+-- Loading project breakpoints replaces OrchLaunch-managed entries only and
+-- leaves breakpoints installed directly through nvim-dap untouched.
+local dap_breakpoints = require("dap.breakpoints")
+local other_path = root .. "/other.cpp"
+h.write(other_path, "int other() { return 0; }\n")
+local other_buf = vim.fn.bufadd(other_path)
+dap_breakpoints.set({}, other_buf, 1)
+require("orchlaunch.state").get().breakpoints = {
+    { file = "prog.cpp", line = 2 },
+}
+h.eq("replacement project breakpoint applied", breakpoints.load(), 1)
+h.check("previous OrchLaunch breakpoint is replaced", not breakpoints.has(vim.fn.bufadd(root .. "/prog.cpp"), 3))
+h.check("replacement OrchLaunch breakpoint is applied", breakpoints.has(vim.fn.bufadd(root .. "/prog.cpp"), 2))
+h.check("direct nvim-dap breakpoint survives project load", breakpoints.has(other_buf, 1))
+
+-- Leaving a project without another `.orch` directory also removes only the
+-- managed entries, not breakpoints owned by direct nvim-dap users.
+local outside_root = h.tempdir()
+orch.setup({ root = outside_root, silent = true })
+h.check("project exit removes OrchLaunch breakpoint", not breakpoints.has(vim.fn.bufadd(root .. "/prog.cpp"), 2))
+h.check("project exit preserves direct nvim-dap breakpoint", breakpoints.has(other_buf, 1))
+orch.create_project(root)
+
 -- Simulate a fresh editor: drop in-memory breakpoints, reload the project, and
 -- let the module restore them from disk.
-require("dap.breakpoints").clear()
+dap_breakpoints.clear()
 h.eq("breakpoints cleared in memory", #breakpoints.list(), 0)
 
 require("orchlaunch.state").reset()

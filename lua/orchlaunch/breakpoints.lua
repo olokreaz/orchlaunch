@@ -7,6 +7,28 @@
 
 local M = {}
 
+-- Track only breakpoints managed by OrchLaunch. nvim-dap's breakpoint store is
+-- global, so clearing it would also erase breakpoints belonging to other tools.
+local managed = {}
+
+---@param bufnr integer
+---@param line integer
+local function mark_managed(bufnr, line)
+    managed[bufnr] = managed[bufnr] or {}
+    managed[bufnr][line] = true
+end
+
+---@param bufnr integer
+---@param line integer
+local function unmark_managed(bufnr, line)
+    if managed[bufnr] then
+        managed[bufnr][line] = nil
+        if next(managed[bufnr]) == nil then
+            managed[bufnr] = nil
+        end
+    end
+end
+
 local function get_dap()
     local ok, dap = pcall(require, "dap")
     if not ok then
@@ -92,6 +114,7 @@ function M.set(opts, bufnr, lnum)
         return false
     end
     bp.set(opts or {}, bufnr, lnum)
+    mark_managed(bufnr, lnum)
     M.persist()
     return true
 end
@@ -106,6 +129,11 @@ function M.toggle(opts, bufnr, lnum)
         return false
     end
     bp.toggle(opts or {}, bufnr, lnum)
+    if M.has(bufnr, lnum) then
+        mark_managed(bufnr, lnum)
+    else
+        unmark_managed(bufnr, lnum)
+    end
     M.persist()
     return true
 end
@@ -119,6 +147,9 @@ function M.remove(bufnr, lnum)
         return false
     end
     local removed = bp.remove(bufnr, lnum)
+    if removed then
+        unmark_managed(bufnr, lnum)
+    end
     M.persist()
     return removed
 end
@@ -129,19 +160,26 @@ function M.clear()
     if not bp then
         return false
     end
-    bp.clear()
+    M.clear_live()
     M.persist()
     return true
 end
 
---- Removes every breakpoint from nvim-dap without touching the persisted
---- project copy. Used when switching projects or before `load()` re-applies a
---- different project's breakpoints.
+--- Removes only breakpoints managed by OrchLaunch without touching the
+--- persisted project copy. Breakpoints set directly through nvim-dap remain.
 function M.clear_live()
     local bp = get_bp()
-    if bp then
-        bp.clear()
+    if not bp then
+        managed = {}
+        return
     end
+
+    for bufnr, lines in pairs(managed) do
+        for line in pairs(lines) do
+            bp.remove(bufnr, line)
+        end
+    end
+    managed = {}
 end
 
 -- ============================================================================
@@ -318,6 +356,7 @@ function M.load()
                     log_message = record.log_message,
                     hit_condition = record.hit_condition,
                 }, bufnr, record.line)
+                mark_managed(bufnr, record.line)
                 applied = applied + 1
             end
         end
