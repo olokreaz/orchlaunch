@@ -99,6 +99,37 @@ end
 vim.cmd("OrchLaunchSelect")
 h.eq("OrchLaunchSelect without a name still opens the picker", #calls, 1)
 h.eq("picker selection still sets active configuration", require("orchlaunch.active").get(root), "Three")
+
+-- A project can appear after plugin setup without a DirChanged event (for
+-- example, a later command creates `.orch` in the current directory). The
+-- command must lazy-load the project state and its persisted breakpoints.
+reset()
+local lazy_root = h.tempdir()
+vim.cmd("cd " .. vim.fn.fnameescape(lazy_root))
+orch.setup({ root = lazy_root, silent = true })
+local lazy_marker = lazy_root .. "/lazy-breakpoint.cpp"
+h.write(lazy_marker, "int main() { return 0; }\\n")
+assert(require("orchlaunch.project").create(lazy_root))
+h.write(lazy_root .. "/.orch/breakpoints.json", vim.json.encode({
+    breakpoints = { { file = "lazy-breakpoint.cpp", line = 1 } },
+}))
+h.write(lazy_root .. "/.orch/run_configurations.json", vim.json.encode({
+    configurations = { { name = "Lazy", type = "native", target = "/bin/true" } },
+}))
+h.eq("lazy test begins with no loaded project", state.is_loaded(), false)
+local breakpoints_module = require("orchlaunch.breakpoints")
+local original_load = breakpoints_module.load
+local lazy_breakpoints_loaded = false
+breakpoints_module.load = function()
+    lazy_breakpoints_loaded = true
+    return 1
+end
+vim.cmd("OrchLaunchSelect Lazy")
+breakpoints_module.load = original_load
+h.eq("lazy OrchLaunchSelect loads the named configuration", require("orchlaunch.active").get(lazy_root), "Lazy")
+h.check("lazy OrchLaunchSelect loads project state", state.is_loaded() and state.root() == lazy_root)
+h.check("lazy project loading restores persisted breakpoints", lazy_breakpoints_loaded)
+vim.cmd("cd " .. vim.fn.fnameescape(root))
 local _ = marker_config
 
 local function cursor_on(text)

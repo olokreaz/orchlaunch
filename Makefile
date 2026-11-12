@@ -36,3 +36,4 @@ e2e:
 	$(MAKE) fixture
 	./tests/run.sh
 	./tests/func/run.sh
+	./tests/func/native_debug_run.sh

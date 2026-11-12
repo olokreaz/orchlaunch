@@ -86,7 +86,20 @@ local function ensure_loaded()
         return nil
     end
 
-    return state.setup(found, orch_dir)
+    local ok, err = pcall(state.setup, found, orch_dir)
+    if not ok then
+        state.report_error(tostring(err):gsub("^%[orchlaunch%]%s*", ""))
+        return nil
+    end
+
+    local breakpoints_ok, breakpoints_err = pcall(function()
+        require("orchlaunch.breakpoints").load()
+    end)
+    if not breakpoints_ok then
+        state.report_error(tostring(breakpoints_err))
+    end
+
+    return state
 end
 
 --- Resolves a name argument, falling back to the active configuration.

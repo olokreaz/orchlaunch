@@ -165,6 +165,17 @@ orch.setup({ root = root, silent = true })
 orch.setup({ root = root, silent = true, write_schema_ref = true })
 local url = schemas.github_urls().toolchain
 
+-- state.save must compare and remember the exact document written by
+-- config.save, including its automatically-added schema reference.
+local project_state = require("orchlaunch.state")
+project_state.add_configuration(config.native({ name = "SchemaSave", target = "/bin/true" }))
+local first_state_save, first_state_err = project_state.save()
+h.check("state.save writes with $schema enabled", first_state_save, first_state_err)
+local run_config_path = root .. "/.orch/run_configurations.json"
+h.contains("state.save persists its schema reference", h.read(run_config_path), schemas.github_urls().run_configurations)
+local second_state_save, second_state_err = project_state.save()
+h.check("repeated state.save succeeds with $schema enabled", second_state_save, second_state_err)
+
 local function write_buffer(lines)
     vim.cmd("silent! %bwipeout!")
     local path = root .. "/.orch/toolchain.json"

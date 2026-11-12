@@ -79,6 +79,14 @@ for _, name in ipairs(NAMES) do
 end
 
 -- ---- 3. the validator has teeth --------------------------------------------------
+local cmake_profile_schema = schemas.cmake_settings.definitions.cmake_profile
+for _, key in ipairs({
+    "name", "kind", "configure_preset", "build_preset", "test_preset", "package_preset", "workflow_preset",
+    "ctest", "toolchain", "generator", "build_type", "build_dir", "install_dir", "configure_args", "build_args",
+    "install_args", "definitions", "environment",
+}) do
+    h.check(("CMake profile field %q is explicitly described"):format(key), cmake_profile_schema.properties[key] ~= nil)
+end
 invalid("tools as an object is rejected", "external_tools", '{ "tools": {} }')
 invalid("toolchains as an object is rejected", "toolchain", '{ "toolchains": {} }')
 invalid("configurations as an object is rejected", "run_configurations", '{ "configurations": {} }')
@@ -94,6 +102,16 @@ invalid("broken JSON is rejected", "toolchain", '{ "toolchains": [ ')
 valid("empty lists are valid", "run_configurations", '{ "configurations": [] }')
 valid("a $schema key is allowed", "toolchain", '{ "$schema": "x", "toolchains": [] }')
 valid("unknown keys are preserved/allowed", "cmake_settings", '{ "cmake": { "profiles": [], "future": 1 }, "extra": true }')
+invalid("CMake profile requires a non-empty name", "cmake_settings", '{ "cmake": { "profiles": [ {} ] } }')
+invalid("CMake profile rejects a non-string preset", "cmake_settings", '{ "cmake": { "profiles": [ { "name": "Debug", "package_preset": 3 } ] } }')
+valid("CMake profile presets are explicitly typed", "cmake_settings",
+    '{ "cmake": { "profiles": [ { "name": "Debug", "package_preset": "pkg", "workflow_preset": "all", "ctest": "ctest" } ] } }')
+valid("legacy flat CMake settings validate", "cmake_settings",
+    '{ "settings": { "name": "Default", "ctest": "ctest", "package_preset": "pkg", "workflow_preset": "all", "profiles": [ { "name": "Debug" } ] } }')
+valid("legacy root-level CMake profiles validate", "cmake_settings",
+    '{ "active": "Debug", "source_dir": "src", "profiles": [ { "name": "Debug", "build_type": "Debug" } ] }')
+valid("legacy root-level flat CMake settings validate", "cmake_settings",
+    '{ "name": "Default", "build_dir": "build", "generator": "Ninja", "ctest": "ctest" }')
 
 -- ---- 4. files written by the plugin validate -------------------------------------
 local messages = {}

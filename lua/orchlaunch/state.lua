@@ -897,7 +897,7 @@ function M.save()
     end
 
     for _, path in ipairs(paths) do
-        local document = documents[path]
+        local document = config.with_schema_ref(path, documents[path])
         local disk = current.last_seen[path]
         local text = config.stringify(document)
 

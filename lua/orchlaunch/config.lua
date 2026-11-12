@@ -670,6 +670,7 @@ end
 ---@field configure_preset? string
 ---@field build_preset? string
 ---@field test_preset? string
+---@field ctest? string
 ---@field package_preset? string
 ---@field workflow_preset? string
 ---@field generator? string
@@ -693,6 +694,7 @@ function M.cmake_settings(opts)
         configure_preset = opts.configure_preset,
         build_preset = opts.build_preset,
         test_preset = opts.test_preset,
+        ctest = opts.ctest,
         package_preset = opts.package_preset,
         workflow_preset = opts.workflow_preset,
         generator = opts.generator,

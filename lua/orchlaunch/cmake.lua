@@ -195,9 +195,47 @@ local function preset_environment(resolved)
     end
 
     if resolved and type(resolved.environment) == "table" then
+        local parent_env = vim.fn.environ()
         local ctx = preset_context(resolved, M.preset_name("configure"))
-        for key, value in pairs(resolved.environment) do
-            out[key] = presets.expand(tostring(value), ctx)
+        local environment = resolved.environment
+        local cache, resolving = {}, {}
+
+        local resolve
+        resolve = function(key)
+            if cache[key] ~= nil then
+                return cache[key]
+            end
+            if resolving[key] then
+                -- CMake rejects cyclic preset environment references. Avoid
+                -- recursing forever if the user selects such a preset anyway.
+                return ""
+            end
+
+            local value = environment[key]
+            if value == nil then
+                return parent_env[key]
+            end
+
+            resolving[key] = true
+            local expand_ctx = vim.tbl_extend("force", {}, ctx, {
+                env = setmetatable({}, {
+                    __index = function(_, name)
+                        if environment[name] ~= nil then
+                            return resolve(name)
+                        end
+                        return parent_env[name]
+                    end,
+                }),
+                penv = parent_env,
+            })
+            local expanded = presets.expand(tostring(value), expand_ctx)
+            resolving[key] = nil
+            cache[key] = expanded
+            return expanded
+        end
+
+        for key in pairs(environment) do
+            out[key] = resolve(key)
         end
     end
 

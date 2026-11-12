@@ -35,7 +35,11 @@ local cmake_presets = [[
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "COMMON": "2" },
-      "environment": { "CHILD": "c" }
+      "environment": {
+        "CHILD": "c",
+        "DERIVED": "$env{BASE}",
+        "CHAINED": "$env{DERIVED}/child"
+      }
     }
   ],
   "buildPresets": [
@@ -144,6 +148,11 @@ state.set_cmake_settings(config.cmake_settings({
     test_preset = "tests",
     toolchain = "Clang",
 }))
+
+check("preset environment resolves inherited references", (function()
+    local env = cmake.configure_spec().env
+    return env.BASE == "b" and env.DERIVED == "b" and env.CHAINED == "b/child"
+end)())
 
 check("binary_dir from preset", cmake.binary_dir() == root .. "/build/debug", cmake.binary_dir())
 

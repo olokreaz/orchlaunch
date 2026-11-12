@@ -165,6 +165,7 @@
 ---@field configure_preset? string CMake configure preset name.
 ---@field build_preset? string CMake build preset name.
 ---@field test_preset? string CTest test preset name.
+---@field ctest? string CTest executable path or command override.
 ---@field package_preset? string CMake package preset name.
 ---@field workflow_preset? string CMake workflow preset name.
 ---@field generator? string CMake generator (e.g. `Ninja`).
