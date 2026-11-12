@@ -11,21 +11,74 @@ local M = {}
 -- global, so clearing it would also erase breakpoints belonging to other tools.
 local managed = {}
 
+---@param bp table
 ---@param bufnr integer
 ---@param line integer
-local function mark_managed(bufnr, line)
-    managed[bufnr] = managed[bufnr] or {}
-    managed[bufnr][line] = true
+---@return table?
+local function live_breakpoint(bp, bufnr, line)
+    for _, entry in ipairs((bp.get(bufnr) or {})[bufnr] or {}) do
+        if entry.line == line then
+            return {
+                condition = entry.condition,
+                log_message = entry.logMessage,
+                hit_condition = entry.hitCondition,
+            }
+        end
+    end
+    return nil
 end
 
+---@param left table?
+---@param right table?
+---@return boolean
+local function same_breakpoint(left, right)
+    return left ~= nil
+        and right ~= nil
+        and left.condition == right.condition
+        and left.log_message == right.log_message
+        and left.hit_condition == right.hit_condition
+end
+
+---@param bp table
 ---@param bufnr integer
 ---@param line integer
-local function unmark_managed(bufnr, line)
-    if managed[bufnr] then
-        managed[bufnr][line] = nil
-        if next(managed[bufnr]) == nil then
-            managed[bufnr] = nil
+---@param previous table?
+local function mark_managed(bp, bufnr, line, previous)
+    managed[bufnr] = managed[bufnr] or {}
+    local entry = managed[bufnr][line]
+    if not entry then
+        entry = { previous = previous or false }
+        managed[bufnr][line] = entry
+    end
+    entry.applied = live_breakpoint(bp, bufnr, line)
+end
+
+---@param bp table
+---@param bufnr integer
+---@param line integer
+local function restore_managed(bp, bufnr, line)
+    local entry = managed[bufnr] and managed[bufnr][line]
+    if not entry then
+        return
+    end
+
+    local current = live_breakpoint(bp, bufnr, line)
+    if current then
+        if same_breakpoint(current, entry.applied) then
+            bp.remove(bufnr, line)
+        else
+            -- Someone changed this position through nvim-dap after OrchLaunch
+            -- claimed it; do not erase their newer breakpoint.
+            entry = nil
         end
+    end
+
+    if entry and entry.previous then
+        bp.set(entry.previous, bufnr, line)
+    end
+    managed[bufnr][line] = nil
+    if next(managed[bufnr]) == nil then
+        managed[bufnr] = nil
     end
 end
 
@@ -113,8 +166,12 @@ function M.set(opts, bufnr, lnum)
     if not bp then
         return false
     end
+    local previous
+    if not (managed[bufnr] and managed[bufnr][lnum]) then
+        previous = live_breakpoint(bp, bufnr, lnum)
+    end
     bp.set(opts or {}, bufnr, lnum)
-    mark_managed(bufnr, lnum)
+    mark_managed(bp, bufnr, lnum, previous)
     M.persist()
     return true
 end
@@ -128,11 +185,18 @@ function M.toggle(opts, bufnr, lnum)
     if not bp then
         return false
     end
+    local current = live_breakpoint(bp, bufnr, lnum)
+    local was_managed = managed[bufnr] and managed[bufnr][lnum] ~= nil
     bp.toggle(opts or {}, bufnr, lnum)
-    if M.has(bufnr, lnum) then
-        mark_managed(bufnr, lnum)
-    else
-        unmark_managed(bufnr, lnum)
+    local after = live_breakpoint(bp, bufnr, lnum)
+    if after then
+        local previous
+        if not was_managed then
+            previous = current
+        end
+        mark_managed(bp, bufnr, lnum, previous)
+    elseif was_managed then
+        restore_managed(bp, bufnr, lnum)
     end
     M.persist()
     return true
@@ -147,8 +211,8 @@ function M.remove(bufnr, lnum)
         return false
     end
     local removed = bp.remove(bufnr, lnum)
-    if removed then
-        unmark_managed(bufnr, lnum)
+    if removed and managed[bufnr] and managed[bufnr][lnum] then
+        restore_managed(bp, bufnr, lnum)
     end
     M.persist()
     return removed
@@ -174,12 +238,15 @@ function M.clear_live()
         return
     end
 
+    local positions = {}
     for bufnr, lines in pairs(managed) do
         for line in pairs(lines) do
-            bp.remove(bufnr, line)
+            positions[#positions + 1] = { bufnr, line }
         end
     end
-    managed = {}
+    for _, position in ipairs(positions) do
+        restore_managed(bp, position[1], position[2])
+    end
 end
 
 -- ============================================================================
@@ -351,12 +418,16 @@ function M.load()
             local path = M.to_absolute(record.file)
             if vim.fn.filereadable(path) == 1 then
                 local bufnr = buffer_for(path)
+                local previous
+                if not (managed[bufnr] and managed[bufnr][record.line]) then
+                    previous = live_breakpoint(bp, bufnr, record.line)
+                end
                 bp.set({
                     condition = record.condition,
                     log_message = record.log_message,
                     hit_condition = record.hit_condition,
                 }, bufnr, record.line)
-                mark_managed(bufnr, record.line)
+                mark_managed(bp, bufnr, record.line, previous)
                 applied = applied + 1
             end
         end

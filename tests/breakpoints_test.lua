@@ -105,6 +105,43 @@ h.check("previous OrchLaunch breakpoint is replaced", not breakpoints.has(vim.fn
 h.check("replacement OrchLaunch breakpoint is applied", breakpoints.has(vim.fn.bufadd(root .. "/prog.cpp"), 2))
 h.check("direct nvim-dap breakpoint survives project load", breakpoints.has(other_buf, 1))
 
+-- nvim-dap has one record per buffer/line, so temporarily claiming a position
+-- must preserve and later restore the direct breakpoint it replaced.
+local shared_path = root .. "/shared.cpp"
+h.write(shared_path, "int shared() { return 0; }\n")
+local shared_buf = vim.fn.bufadd(shared_path)
+dap_breakpoints.set({ condition = "original == true", log_message = "keep me" }, shared_buf, 1)
+require("orchlaunch.state").get().breakpoints = {
+    { file = "shared.cpp", line = 1, condition = "project == true" },
+}
+h.eq("project claims a colliding direct breakpoint", breakpoints.load(), 1)
+h.eq("project breakpoint temporarily replaces direct condition", breakpoints.list()[2].condition, "project == true")
+breakpoints.clear_live()
+local shared_restored
+for _, entry in ipairs(breakpoints.list()) do
+    if entry.bufnr == shared_buf and entry.line == 1 then
+        shared_restored = entry
+    end
+end
+h.eq("clearing project breakpoints restores direct condition", shared_restored and shared_restored.condition, "original == true")
+h.eq("clearing project breakpoints restores direct log message", shared_restored and shared_restored.log_message, "keep me")
+
+-- If another nvim-dap client changes a claimed position, clearing OrchLaunch
+-- must leave the newer direct breakpoint intact.
+require("orchlaunch.state").get().breakpoints = {
+    { file = "shared.cpp", line = 1, condition = "project == true" },
+}
+breakpoints.load()
+dap_breakpoints.set({ condition = "newer == true" }, shared_buf, 1)
+breakpoints.clear_live()
+local newer_direct
+for _, entry in ipairs(breakpoints.list()) do
+    if entry.bufnr == shared_buf and entry.line == 1 then
+        newer_direct = entry
+    end
+end
+h.eq("clearing preserves newer direct condition", newer_direct and newer_direct.condition, "newer == true")
+
 -- Leaving a project without another `.orch` directory also removes only the
 -- managed entries, not breakpoints owned by direct nvim-dap users.
 local outside_root = h.tempdir()
