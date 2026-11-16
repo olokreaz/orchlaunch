@@ -15,7 +15,9 @@ vim.o.shadafile = "NONE"
 
 local source_file = root .. "/main.cpp"
 local program = root .. "/native_debug_fixture"
-local break_line = 4
+-- Breakpoint on the call to work() in main: Step In enters work(), Step Out
+-- returns to main, Continue runs to exit.
+local break_line = 14
 -- nvim-dap draws breakpoints with the DapBreakpoint sign; the minimal test
 -- profile does not define it, so define it before setting any breakpoint.
 vim.fn.sign_define("DapBreakpoint", { text = "B", texthl = "", linehl = "", numhl = "" })
