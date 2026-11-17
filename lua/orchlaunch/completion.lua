@@ -43,6 +43,13 @@ M.MACROS = {
     { label = "target", detail = "this configuration's CMake target" },
     { label = "targetPath", detail = "built artifact of that target" },
     { label = "projectName", detail = "basename of the workspace" },
+    { label = "targetName", detail = "CMake target name (libraries too)" },
+    { label = "targetDir", detail = "directory of the built artifact" },
+    { label = "sourceParentDir", detail = "parent of the CMake source directory" },
+    { label = "projectDir", detail = "alias of workspace (CLion $PROJECT_DIR$)" },
+    { label = "userHome", detail = "home directory of the user" },
+    { label = "tempDir", detail = "system temporary directory" },
+    { label = "osName", detail = "operating system name (Linux, Darwin, ...)" },
 }
 
 --- Text the cursor is inside of when the completion starts: the `${...}` opener

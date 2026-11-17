@@ -316,6 +316,31 @@ local function check_run_configurations(root, ctx)
                                 ("Before-launch references unknown external tool: %s"):format(tool.value)
                             )
                         end
+                    elseif step_type == "exec" then
+                        local argv = jsonpos.get(step, "argv")
+                        if not argv or argv.kind ~= "array" or #argv.items == 0 then
+                            out[#out + 1] = at_key(step, "argv", SEV.ERROR, "exec step requires a non-empty 'argv'")
+                        end
+                        local capture = jsonpos.get_string(step, "capture")
+                        if capture and not capture:match("^[%a_][%w_]*$") then
+                            out[#out + 1] = at_key(
+                                step,
+                                "capture",
+                                SEV.ERROR,
+                                ("capture name %q must be a plain identifier"):format(capture)
+                            )
+                        end
+                        local log_node = jsonpos.get(step, "log")
+                        if log_node then
+                            local log_value = log_node.kind == "string" and log_node.value or nil
+                            if log_node.kind == "object" then
+                                log_value = { file = jsonpos.get_string(log_node, "file") }
+                            end
+                            local _, log_err = require("orchlaunch.runner.output").normalize_log(log_value)
+                            if log_err then
+                                out[#out + 1] = at_key(step, "log", SEV.ERROR, log_err)
+                            end
+                        end
                     elseif step_type ~= "build" and step_type ~= "install" then
                         out[#out + 1] = at_node(
                             jsonpos.get(step, "type") or step,

@@ -10,6 +10,8 @@ local cmake_steps = require("orchlaunch.runner.cmake")
 local process = require("orchlaunch.process")
 local state = require("orchlaunch.state")
 local tool_spec = require("orchlaunch.tool_spec").build
+local output = require("orchlaunch.runner.output")
+local config = require("orchlaunch.config")
 
 local M = {}
 
@@ -26,14 +28,98 @@ local start_async = cmake_steps.start_async
 ---@param item any
 ---@param scope? table
 ---@return table
-local function call_of(item, scope)
+local function call_of(item, scope, captured)
     local call = { scope = scope }
     if type(item) == "table" then
         call.args = item.args
         call.env = item.env
-        call.vars = item.vars
+        -- Step-declared vars win over captured ones only if the step sets them.
+        call.vars = vim.tbl_extend("force", captured or {}, item.vars or {})
+    else
+        call.vars = captured
     end
     return call
+end
+
+--- Spec for an `exec` step: the argv runs as given, without a shell. `cwd`
+--- and `env` take the same macros as everything else.
+---@param item table
+---@param scope? table
+---@return OrchProcessSpec
+local function exec_spec(item, scope, captured)
+    local vars_scope = vim.tbl_extend("force", scope or {}, { vars = captured or {} })
+    local argv = state.resolve_list(item.argv, vars_scope)
+    local program = table.remove(argv, 1)
+    return {
+        program = program,
+        args = argv,
+        cwd = state.resolve_path(item.cwd, vars_scope) or state.root(),
+        env = state.resolve_environment(item.env, vars_scope),
+        inherit_env = item.inherit_env ~= false,
+        timeout = item.timeout or require("orchlaunch.tool_spec").DEFAULT_TIMEOUT_MS,
+    }
+end
+
+--- Shows a step's output as the `log` policy says.
+---@param label string
+---@param plan { level: string, text?: string, file_text?: string }
+---@param log any
+---@param scope? table
+local function show_output(label, plan, log, scope)
+    if plan.file_text and type(log) == "table" then
+        local path = state.resolve_path(log.file, scope)
+        if path then
+            vim.fn.mkdir(vim.fs.dirname(path), "p")
+            vim.fn.writefile(vim.split(plan.file_text, "\n", { plain = true }), path)
+        end
+        return
+    end
+    if plan.text and plan.text ~= "" then
+        local level = plan.level == "error" and ERROR or vim.log.levels.INFO
+        notify(("%s:\n%s"):format(label, plan.text), level)
+    end
+end
+
+--- Runs one `exec` step synchronously. Returns ok.
+---@param item table
+---@param scope? table
+---@return boolean
+local function run_exec(item, scope, captured)
+    local log, log_err = output.normalize_log(item.log)
+    if not log then
+        notify(("exec step: %s"):format(log_err), ERROR)
+        return false
+    end
+    local spec = exec_spec(item, scope, captured)
+    local result = process.run(spec)
+    local ok = process.succeeded(result)
+    show_output("exec " .. spec.program, output.plan(log, result, ok), log, scope)
+    if ok and item.capture then
+        captured[item.capture] = output.capture_value(result.stdout)
+    end
+    return ok
+end
+
+--- Runs one `exec` step asynchronously.
+---@param item table
+---@param scope? table
+---@param done fun(ok: boolean)
+local function run_exec_async(item, scope, captured, done)
+    local log, log_err = output.normalize_log(item.log)
+    if not log then
+        notify(("exec step: %s"):format(log_err), ERROR)
+        done(false)
+        return
+    end
+    local spec = exec_spec(item, scope, captured)
+    start_async(spec, "exec " .. spec.program, function(result)
+        local ok = process.succeeded(result)
+        show_output("exec " .. spec.program, output.plan(log, result, ok), log, scope)
+        if ok and item.capture then
+            captured[item.capture] = output.capture_value(result.stdout)
+        end
+        done(ok)
+    end)
 end
 
 --- Runs an external tool synchronously.
@@ -51,6 +137,7 @@ end
 ---@param before? OrchBefore
 ---@return boolean
 local function run_before(before, scope)
+    local captured = {}
     for _, item in ipairs(before and before.tools or {}) do
         local kind = type(item) == "table" and item.type or item
 
@@ -69,9 +156,13 @@ local function run_before(before, scope)
                 return false
             end
 
-            local result = run_tool(tool, call_of(item, scope))
+            local result = run_tool(tool, call_of(item, scope, captured))
             if not process.succeeded(result) then
                 notify(("external tool %q failed with code %d"):format(name, result.code), ERROR)
+                return false
+            end
+        elseif kind == "exec" then
+            if not run_exec(item, scope, captured) then
                 return false
             end
         else
@@ -95,6 +186,7 @@ end
 ---@param on_done fun(ok: boolean)
 local function run_before_async(before, scope, on_done)
     local items = before and before.tools or {}
+    local captured = {}
     local index = 0
 
     local function next_item()
@@ -125,7 +217,7 @@ local function run_before_async(before, scope, on_done)
                 return
             end
 
-            run_tool_async(tool, call_of(item, scope), function(result)
+            run_tool_async(tool, call_of(item, scope, captured), function(result)
                 if not process.succeeded(result) then
                     local detail = (result.stderr or ""):gsub("%s+$", "")
                     notify(
@@ -139,6 +231,14 @@ local function run_before_async(before, scope, on_done)
                     on_done(false)
                 else
                     next_item()
+                end
+            end)
+        elseif kind == "exec" then
+            run_exec_async(item, scope, captured, function(ok)
+                if ok then
+                    next_item()
+                else
+                    on_done(false)
                 end
             end)
         else

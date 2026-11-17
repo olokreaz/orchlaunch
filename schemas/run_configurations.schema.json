@@ -72,7 +72,7 @@
             },
             "cwd": {
               "type": "string",
-              "description": "Working directory for the process. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetPath}, ${projectName}, ${env:NAME}."
+              "description": "Working directory for the process. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetName}, ${targetPath}, ${targetDir}, ${projectName}, ${projectDir}, ${sourceParentDir}, ${userHome}, ${tempDir}, ${osName}, ${env:NAME}."
             },
             "args": {
               "type": "array",
@@ -92,7 +92,7 @@
             "environment": {
               "type": "object",
               "additionalProperties": { "type": "string" },
-              "description": "Additional environment variables. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetPath}, ${projectName}, ${env:NAME}."
+              "description": "Additional environment variables. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetName}, ${targetPath}, ${targetDir}, ${projectName}, ${projectDir}, ${sourceParentDir}, ${userHome}, ${tempDir}, ${osName}, ${env:NAME}."
             },
             "console": {
               "$ref": "#/$defs/console"
@@ -184,6 +184,20 @@
       },
       "additionalProperties": true
     },
+    "step-log": {
+      "description": "Where a before-step's output goes. none: silent on success, stderr tail on failure. errorsOnly: silent on success, full output on failure. console: always shown. { file }: always written to the file (macros expanded, directory created).",
+      "oneOf": [
+        { "type": "string", "enum": ["none", "errorsOnly", "console"] },
+        {
+          "type": "object",
+          "properties": {
+            "file": { "type": "string", "minLength": 1, "description": "File path. Supports macros, e.g. ${tempDir}/orch/x.log." }
+          },
+          "required": ["file"],
+          "additionalProperties": false
+        }
+      ]
+    },
     "before": {
       "type": "object",
       "description": "Before-launch steps (run before the main configuration)",
@@ -232,9 +246,42 @@
                     "type": "object",
                     "additionalProperties": { "type": "string" },
                     "description": "Values for ${var:name} and ${var:name?default} in this step's args, env and the tool's fields."
-                  }
+                  },
+                  "log": { "$ref": "#/$defs/step-log" }
                 },
                 "required": ["type", "tool"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "Runs a program directly (no shell). Use sh -c explicitly for pipes.",
+                "properties": {
+                  "type": { "const": "exec" },
+                  "argv": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string" },
+                    "description": "Program and its arguments. Supports macros and ${var:name}."
+                  },
+                  "cwd": {
+                    "type": "string",
+                    "description": "Working directory. Supports macros."
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Environment variables for this command. Supports macros and ${var:name}."
+                  },
+                  "inherit_env": { "type": "boolean", "default": true },
+                  "timeout": { "type": "number", "minimum": 1, "description": "Timeout in milliseconds." },
+                  "capture": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "description": "Store stdout (without trailing newlines) as ${var:NAME} for later steps."
+                  },
+                  "log": { "$ref": "#/$defs/step-log" }
+                },
+                "required": ["type", "argv"],
                 "additionalProperties": false
               }
             ]

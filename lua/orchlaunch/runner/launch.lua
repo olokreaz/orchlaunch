@@ -45,7 +45,7 @@ end
 local function launch_native_async(name, mode, on_done)
     local cfg = state.require_configuration(name)
 
-    run_before_async(cfg.before, { target = cfg.target }, function(proceed)
+    run_before_async(cfg.before, { target = cfg.target, target_name = cfg.target_name or cfg.name }, function(proceed)
         if not proceed then
             on_done(false)
             return
@@ -82,8 +82,8 @@ local function launch_native_async(name, mode, on_done)
                 type = "launch",
                 adapter = M.launch_adapter(cfg),
                 program = program,
-                args = state.resolve_list(cfg.args, { target = cfg.target }),
-                cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
+                args = state.resolve_list(cfg.args, { target = cfg.target, target_name = cfg.target_name or cfg.name }),
+                cwd = state.resolve_path(cfg.cwd, { target = cfg.target, target_name = cfg.target_name or cfg.name }) or state.root(),
                 env = M.launch_environment(cfg),
             })
             on_done(config ~= nil)
@@ -92,8 +92,8 @@ local function launch_native_async(name, mode, on_done)
 
         local spec = {
             program = program,
-            args = state.resolve_list(cfg.args, { target = cfg.target }),
-            cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
+            args = state.resolve_list(cfg.args, { target = cfg.target, target_name = cfg.target_name or cfg.name }),
+            cwd = state.resolve_path(cfg.cwd, { target = cfg.target, target_name = cfg.target_name or cfg.name }) or state.root(),
             env = M.launch_environment(cfg),
             inherit_env = cfg.inherit_env ~= false,
             sudo = cfg.sudo == true,
@@ -185,7 +185,7 @@ local function launch_remote_debug_async(name, mode, on_done)
     end
 
     local cfg = state.require_configuration(name)
-    run_before_async(cfg.before, { target = cfg.target }, function(proceed)
+    run_before_async(cfg.before, { target = cfg.target, target_name = cfg.target_name or cfg.name }, function(proceed)
         if not proceed then
             on_done(false)
             return
@@ -313,7 +313,7 @@ function M.launch_environment(cfg)
     for key, value in pairs(cmake.profile_environment()) do
         env[key] = value
     end
-    for key, value in pairs(state.resolve_environment(cfg.environment, { target = cfg.target })) do
+    for key, value in pairs(state.resolve_environment(cfg.environment, { target = cfg.target, target_name = cfg.target_name or cfg.name })) do
         env[key] = value
     end
     return env
@@ -337,7 +337,7 @@ local function launch_native(name, mode)
 
     if mode == "debug" then
         local dbg = require("orchlaunch.debug")
-        if not run_before(cfg.before, { target = cfg.target }) then
+        if not run_before(cfg.before, { target = cfg.target, target_name = cfg.target_name or cfg.name }) then
             return
         end
         if not cfg.target or cfg.target == "" then
@@ -361,14 +361,14 @@ local function launch_native(name, mode)
             type = "launch",
             adapter = M.launch_adapter(cfg),
             program = program,
-            args = state.resolve_list(cfg.args, { target = cfg.target }),
-            cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
+            args = state.resolve_list(cfg.args, { target = cfg.target, target_name = cfg.target_name or cfg.name }),
+            cwd = state.resolve_path(cfg.cwd, { target = cfg.target, target_name = cfg.target_name or cfg.name }) or state.root(),
             env = M.launch_environment(cfg),
         })
         return
     end
 
-    if not run_before(cfg.before, { target = cfg.target }) then
+    if not run_before(cfg.before, { target = cfg.target, target_name = cfg.target_name or cfg.name }) then
         return
     end
 
@@ -395,8 +395,8 @@ local function launch_native(name, mode)
 
     local spec = {
         program = program,
-        args = state.resolve_list(cfg.args, { target = cfg.target }),
-        cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
+        args = state.resolve_list(cfg.args, { target = cfg.target, target_name = cfg.target_name or cfg.name }),
+        cwd = state.resolve_path(cfg.cwd, { target = cfg.target, target_name = cfg.target_name or cfg.name }) or state.root(),
         env = M.launch_environment(cfg),
         inherit_env = cfg.inherit_env ~= false,
         sudo = cfg.sudo == true,
@@ -460,7 +460,7 @@ local function launch_remote_debug(name, mode)
     end
 
     local cfg = state.require_configuration(name)
-    if not run_before(cfg.before, { target = cfg.target }) then
+    if not run_before(cfg.before, { target = cfg.target, target_name = cfg.target_name or cfg.name }) then
         return
     end
     if not start_remote_server(cfg) then

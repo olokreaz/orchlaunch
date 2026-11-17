@@ -79,6 +79,7 @@ end
 --- loading. `tests/schema_check.lua` keeps this set in sync with the schemas.
 M.LIST_KEYS = {
     args = true,
+    argv = true,
     build_args = true,
     configurations = true,
     configure_args = true,
@@ -390,6 +391,12 @@ end
 ---@field target? string Name of the CMake target the configuration points at.
 ---@field vars? table<string,string> Values for `${var:name}` (from a before-step).
 ---@field target_path? string|fun(): string Built artifact of `target`, when known.
+---@field target_name? string CMake target name (works for libraries too).
+---@field target_dir? string|fun(): string Directory of the built artifact.
+---@field source_parent_dir? string
+---@field temp_dir? string
+---@field user_home? string
+---@field os_name? string
 
 --- Macros understood in paths, arguments and environment values. Like CLion's
 --- CMake macros, these resolve from the project state at launch time:
@@ -424,6 +431,19 @@ function M.expand(value, ctx)
         if name == "toolchain" then return value_of(ctx.toolchain) end
         if name == "target" then return ctx.target or "" end
         if name == "targetPath" then return value_of(ctx.target_path) end
+        if name == "targetName" then return ctx.target_name or "" end
+        if name == "targetDir" then
+            local path = value_of(ctx.target_path)
+            return path ~= "" and vim.fs.dirname(path) or ""
+        end
+        if name == "sourceParentDir" then
+            local src = value_of(ctx.source_dir)
+            return src ~= "" and vim.fs.dirname(src) or ""
+        end
+        if name == "projectDir" then return ctx.workspace or "" end
+        if name == "userHome" then return vim.env.HOME or "" end
+        if name == "tempDir" or name == "tmp" then return vim.uv.os_tmpdir() or "" end
+        if name == "osName" then return vim.uv.os_uname().sysname end
         if env then return os.getenv(env) or "" end
         return nil
     end
