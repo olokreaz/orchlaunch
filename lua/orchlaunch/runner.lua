@@ -19,9 +19,7 @@ local DEFAULT_TIMEOUT_MS = 15 * 60 * 1000
 
 --- @param message string
 --- @param level? integer
-local function notify(message, level)
-    vim.notify("[orchlaunch] " .. message, level or vim.log.levels.INFO)
-end
+local notify = require("orchlaunch.notify").notify
 
 -- Forward declaration: `open_terminal` is used by launch paths defined above
 -- its implementation (the asynchronous native launch). Declaring the local up
@@ -36,17 +34,7 @@ local open_terminal
 --- Builds a process spec from an external tool.
 ---@param tool OrchExternalTool
 ---@return OrchProcessSpec
-local function tool_spec(tool)
-    return {
-        program = state.resolve_tool(tool.program),
-        args = state.resolve_list(tool.args),
-        cwd = state.resolve_path(tool.cwd) or state.root(),
-        env = state.resolve_environment(tool.environment),
-        inherit_env = tool.inherit_env ~= false,
-        sudo = tool.sudo == true,
-        timeout = tool.timeout or DEFAULT_TIMEOUT_MS,
-    }
-end
+local tool_spec = require("orchlaunch.tool_spec").build
 
 --- Runs an external tool synchronously.
 ---@param tool OrchExternalTool

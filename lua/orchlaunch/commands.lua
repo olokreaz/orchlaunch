@@ -12,9 +12,7 @@ local registered = false
 
 --- @param message string
 --- @param level? integer
-local function notify(message, level)
-    vim.notify("[orchlaunch] " .. message, level or vim.log.levels.INFO)
-end
+local notify = require("orchlaunch.notify").notify
 
 --- @return string[]
 local function configuration_names()
