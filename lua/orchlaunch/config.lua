@@ -388,6 +388,7 @@ end
 ---@field build_type? string|fun(): string
 ---@field toolchain? string|fun(): string
 ---@field target? string Name of the CMake target the configuration points at.
+---@field vars? table<string,string> Values for `${var:name}` (from a before-step).
 ---@field target_path? string|fun(): string Built artifact of `target`, when known.
 
 --- Macros understood in paths, arguments and environment values. Like CLion's
@@ -427,10 +428,34 @@ function M.expand(value, ctx)
         return nil
     end
 
-    return (value:gsub("%${(env:[%w_]+)}", function(full)
-        return resolve(nil, full:sub(5)) or ("${" .. full .. "}")
-    end):gsub("%${([%w_]+)}", function(name)
-        return resolve(name) or ("${" .. name .. "}")
+    -- One pass over the original text: substituted values are never expanded
+    -- again, so a variable whose value contains `${...}` stays literal.
+    return (value:gsub("%${([^}]+)}", function(expr)
+        local env_name = expr:match("^env:([%w_]+)$")
+        if env_name then
+            return os.getenv(env_name) or ""
+        end
+
+        -- ${var:name} or ${var:name?default}
+        local var_name, fallback = expr:match("^var:([%w_]+)%?(.*)$")
+        if not var_name then
+            var_name = expr:match("^var:([%w_]+)$")
+        end
+        if var_name then
+            local v = ctx.vars and ctx.vars[var_name]
+            if v ~= nil then
+                return v
+            end
+            if fallback then
+                return fallback
+            end
+            return "${" .. expr .. "}"
+        end
+
+        if expr:match("^[%w_]+$") then
+            return resolve(expr) or ("${" .. expr .. "}")
+        end
+        return "${" .. expr .. "}"
     end))
 end
 

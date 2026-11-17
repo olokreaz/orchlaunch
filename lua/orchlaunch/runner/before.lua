@@ -21,11 +21,26 @@ local run_cmake_step = cmake_steps.run_cmake_step
 local run_cmake_step_async = cmake_steps.run_cmake_step_async
 local start_async = cmake_steps.start_async
 
+--- Per-call values of an external-tool step: `args`, `env`, `vars` from the
+--- step itself, plus the owning configuration's scope (for `${target}`).
+---@param item any
+---@param scope? table
+---@return table
+local function call_of(item, scope)
+    local call = { scope = scope }
+    if type(item) == "table" then
+        call.args = item.args
+        call.env = item.env
+        call.vars = item.vars
+    end
+    return call
+end
+
 --- Runs an external tool synchronously.
 ---@param tool OrchExternalTool
 ---@return OrchProcessResult
-local function run_tool(tool)
-    return process.run(tool_spec(tool))
+local function run_tool(tool, call)
+    return process.run(tool_spec(tool, call))
 end
 
 -- ============================================================================
@@ -35,7 +50,7 @@ end
 --- Runs the before-launch actions in order. Returns false if one failed.
 ---@param before? OrchBefore
 ---@return boolean
-local function run_before(before)
+local function run_before(before, scope)
     for _, item in ipairs(before and before.tools or {}) do
         local kind = type(item) == "table" and item.type or item
 
@@ -54,7 +69,7 @@ local function run_before(before)
                 return false
             end
 
-            local result = run_tool(tool)
+            local result = run_tool(tool, call_of(item, scope))
             if not process.succeeded(result) then
                 notify(("external tool %q failed with code %d"):format(name, result.code), ERROR)
                 return false
@@ -69,15 +84,16 @@ end
 
 --- Asynchronous external-tool runner.
 ---@param tool OrchExternalTool
+---@param call? table per-call values from the before-step (see `call_of`)
 ---@param on_done fun(result: OrchProcessResult)
-local function run_tool_async(tool, on_done)
-    start_async(tool_spec(tool), "external tool " .. tool.name, on_done)
+local function run_tool_async(tool, call, on_done)
+    start_async(tool_spec(tool, call), "external tool " .. tool.name, on_done)
 end
 
 --- Asynchronous before-launch chain.
 ---@param before? OrchBefore
 ---@param on_done fun(ok: boolean)
-local function run_before_async(before, on_done)
+local function run_before_async(before, scope, on_done)
     local items = before and before.tools or {}
     local index = 0
 
@@ -109,7 +125,7 @@ local function run_before_async(before, on_done)
                 return
             end
 
-            run_tool_async(tool, function(result)
+            run_tool_async(tool, call_of(item, scope), function(result)
                 if not process.succeeded(result) then
                     local detail = (result.stderr or ""):gsub("%s+$", "")
                     notify(
@@ -133,9 +149,6 @@ local function run_before_async(before, on_done)
 
     next_item()
 end
-
----@param cfg OrchNativeConfiguration
----@return string?
 
 M.run_before = run_before
 M.run_before_async = run_before_async

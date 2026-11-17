@@ -316,6 +316,14 @@ local function check_run_configurations(root, ctx)
                                 ("Before-launch references unknown external tool: %s"):format(tool.value)
                             )
                         end
+                    elseif step_type ~= "build" and step_type ~= "install" then
+                        out[#out + 1] = at_node(
+                            jsonpos.get(step, "type") or step,
+                            SEV.ERROR,
+                            ("Unknown before-launch step type: %s (expected build, install or external)"):format(
+                                tostring(step_type)
+                            )
+                        )
                     elseif (step_type == "build" or step_type == "install") and ctx.targets then
                         local target = jsonpos.get(step, "target")
                         if is_nonempty_string(target) and not ctx.targets[target.value] then

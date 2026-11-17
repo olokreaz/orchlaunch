@@ -213,13 +213,33 @@
                 "type": "object",
                 "properties": {
                   "type": { "const": "external" },
-                  "tool": { "type": "string", "minLength": 1 }
+                  "tool": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Name of an entry in external_tools.json."
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Extra arguments appended after the tool's own args. Supports macros and ${var:name}."
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Environment variables that override the tool's environment for this call. Supports macros and ${var:name}."
+                  },
+                  "vars": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Values for ${var:name} and ${var:name?default} in this step's args, env and the tool's fields."
+                  }
                 },
-                "required": ["type", "tool"]
+                "required": ["type", "tool"],
+                "additionalProperties": false
               }
             ]
           },
-          "description": "List of before-launch actions: build, install, or external tool."
+          "description": "Before-launch steps, run in order. Stops at the first failure: build, install, or an external tool with optional args, env and vars."
         }
       },
       "additionalProperties": true

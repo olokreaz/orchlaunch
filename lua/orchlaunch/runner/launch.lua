@@ -45,7 +45,7 @@ end
 local function launch_native_async(name, mode, on_done)
     local cfg = state.require_configuration(name)
 
-    run_before_async(cfg.before, function(proceed)
+    run_before_async(cfg.before, { target = cfg.target }, function(proceed)
         if not proceed then
             on_done(false)
             return
@@ -185,7 +185,7 @@ local function launch_remote_debug_async(name, mode, on_done)
     end
 
     local cfg = state.require_configuration(name)
-    run_before_async(cfg.before, function(proceed)
+    run_before_async(cfg.before, { target = cfg.target }, function(proceed)
         if not proceed then
             on_done(false)
             return
@@ -337,7 +337,7 @@ local function launch_native(name, mode)
 
     if mode == "debug" then
         local dbg = require("orchlaunch.debug")
-        if not run_before(cfg.before) then
+        if not run_before(cfg.before, { target = cfg.target }) then
             return
         end
         if not cfg.target or cfg.target == "" then
@@ -368,7 +368,7 @@ local function launch_native(name, mode)
         return
     end
 
-    if not run_before(cfg.before) then
+    if not run_before(cfg.before, { target = cfg.target }) then
         return
     end
 
@@ -460,7 +460,7 @@ local function launch_remote_debug(name, mode)
     end
 
     local cfg = state.require_configuration(name)
-    if not run_before(cfg.before) then
+    if not run_before(cfg.before, { target = cfg.target }) then
         return
     end
     if not start_remote_server(cfg) then

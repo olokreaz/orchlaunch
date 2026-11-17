@@ -62,7 +62,7 @@ function M.run_external_tool(name)
         return nil
     end
 
-    return run_tool(tool)
+    return run_tool(tool, nil)
 end
 
 --- Runs an external tool by name asynchronously.
@@ -84,7 +84,7 @@ function M.run_external_tool_async(name, cb)
         return false
     end
 
-    run_tool_async(tool, function(result)
+    run_tool_async(tool, nil, function(result)
         if not process.succeeded(result) then
             local detail = (result.stderr or ""):gsub("%s+$", "")
             notify(

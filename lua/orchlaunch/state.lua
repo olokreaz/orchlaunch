@@ -434,7 +434,7 @@ end
 ---
 --- `scope` (optional) ties `${target}` / `${targetPath}` to one configuration:
 --- pass `{ target = cfg.target }` from a run configuration.
----@param scope? { target?: string }
+---@param scope? { target?: string, vars?: table<string,string> }
 ---@return OrchResolveContext
 function M.context(scope)
     local cmake = require("orchlaunch.cmake")
@@ -448,6 +448,7 @@ function M.context(scope)
         build_type = settings.build_type or "",
         toolchain = (cmake.toolchain() or {}).name or "",
         target = target,
+        vars = scope and scope.vars or nil,
         target_path = guarded(function()
             return target and cmake.find_target(target) or ""
         end),
