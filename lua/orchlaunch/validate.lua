@@ -220,6 +220,20 @@ local function check_run_configurations(root, ctx)
                 end
             end
 
+            -- An absolute path that is the build dir breaks when the project
+            -- moves; the macro form is what the editor generates now.
+            local cwd = jsonpos.get(cfg, "cwd")
+            if is_nonempty_string(cwd) and ctx.build_dir and cwd.value ~= "" then
+                local abs = vim.fs.normalize(cwd.value):gsub("/+$", "")
+                if abs == vim.fs.normalize(ctx.build_dir):gsub("/+$", "") then
+                    out[#out + 1] = at_node(
+                        cwd,
+                        SEV.HINT,
+                        "cwd is an absolute build directory; use ${buildDir} (run :OrchLaunchNormalize to rewrite)"
+                    )
+                end
+            end
+
             local sudo = jsonpos.get(cfg, "sudo")
             local console = jsonpos.get(cfg, "console")
             local mode = console and jsonpos.get_string(console, "mode")
@@ -437,6 +451,16 @@ function M.context()
     local ctx = { targets = nil, toolchains = {}, tools = {} }
     if not state.is_loaded() then
         return ctx
+    end
+
+    -- Build dir from settings alone (no CMake process): a configured
+    -- `build_dir` or the preset-independent default `<source>/build`.
+    local ok_cmake, cmake = pcall(require, "orchlaunch.cmake")
+    if ok_cmake then
+        local ok_dir, dir = pcall(cmake.binary_dir)
+        if ok_dir then
+            ctx.build_dir = dir
+        end
     end
 
     for _, tc in ipairs(state.toolchains().toolchains) do

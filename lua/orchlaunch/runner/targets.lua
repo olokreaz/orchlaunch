@@ -27,7 +27,6 @@ local ERROR = vim.log.levels.ERROR
 ---@return integer created
 local function sync_target_configurations(targets)
     local config = require("orchlaunch.config")
-    local build_dir = cmake.binary_dir()
     local created = 0
 
     for _, target in ipairs(targets) do
@@ -37,7 +36,8 @@ local function sync_target_configurations(targets)
                 name = target.name,
                 target = runtime == "executable" and target.name or nil,
                 runtime = runtime,
-                cwd = build_dir,
+                -- Stored as a macro, like CLion: resolved to the build dir at launch.
+                cwd = "${buildDir}",
                 before = config.before({ config.build(target.name) }),
             }))
             -- Persist immediately: the configuration exists from this moment on.

@@ -413,10 +413,45 @@ function M.orch_dir()
     return M.get().orch_dir
 end
 
+--- Guards lazy CMake directory macros against recursion: `cmake.binary_dir()`
+--- itself resolves `build_dir` through this context, so a `build_dir` that
+--- mentions `${buildDir}` would otherwise loop forever.
+---@param fn fun(): string
+---@return fun(): string
+local function guarded(fn)
+    local busy = false
+    return function()
+        if busy then return "" end
+        busy = true
+        local ok, result = pcall(fn)
+        busy = false
+        if not ok then error(result, 0) end
+        return result or ""
+    end
+end
+
 --- Resolution context used by `config` path/variable helpers.
+---
+--- `scope` (optional) ties `${target}` / `${targetPath}` to one configuration:
+--- pass `{ target = cfg.target }` from a run configuration.
+---@param scope? { target?: string }
 ---@return OrchResolveContext
-function M.context()
-    return { workspace = M.root(), orch_dir = M.orch_dir() }
+function M.context(scope)
+    local cmake = require("orchlaunch.cmake")
+    local target = scope and scope.target or nil
+    local settings = M.cmake_settings() or {}
+    return {
+        workspace = M.root(),
+        orch_dir = M.orch_dir(),
+        build_dir = guarded(function() return cmake.binary_dir() end),
+        source_dir = guarded(function() return cmake.source_dir() end),
+        build_type = settings.build_type or "",
+        toolchain = (cmake.toolchain() or {}).name or "",
+        target = target,
+        target_path = guarded(function()
+            return target and cmake.find_target(target) or ""
+        end),
+    }
 end
 
 -- ============================================================================
@@ -969,26 +1004,26 @@ end
 
 ---@param value? string
 ---@return string?
-function M.resolve_path(value)
-    return config.resolve_path(value, M.context())
+function M.resolve_path(value, scope)
+    return config.resolve_path(value, M.context(scope))
 end
 
 ---@param value? string
 ---@return string?
-function M.resolve_tool(value)
-    return config.resolve_tool(value, M.context())
+function M.resolve_tool(value, scope)
+    return config.resolve_tool(value, M.context(scope))
 end
 
 ---@param value? string[]
 ---@return string[]
-function M.resolve_list(value)
-    return config.resolve_list(value, M.context())
+function M.resolve_list(value, scope)
+    return config.resolve_list(value, M.context(scope))
 end
 
 ---@param value? OrchEnvironment
 ---@return OrchEnvironment
-function M.resolve_environment(value)
-    return config.resolve_environment(value, M.context())
+function M.resolve_environment(value, scope)
+    return config.resolve_environment(value, M.context(scope))
 end
 
 return M

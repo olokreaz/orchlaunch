@@ -25,8 +25,8 @@
         "toolchain": { "type": "string", "description": "Name of the toolchain to use with this profile." },
         "generator": { "type": "string", "description": "CMake generator (e.g., Ninja, Unix Makefiles)." },
         "build_type": { "type": "string", "description": "CMake build type (e.g., Debug, Release, RelWithDebInfo)." },
-        "build_dir": { "type": "string", "description": "Build directory. Supports ${workspace} and ${orch} variables." },
-        "install_dir": { "type": "string", "description": "Install directory. Supports ${workspace} and ${orch} variables." },
+        "build_dir": { "type": "string", "description": "Build directory. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${projectName}, ${env:NAME}." },
+        "install_dir": { "type": "string", "description": "Install directory. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${projectName}, ${env:NAME}." },
         "configure_args": {
           "type": "array", "items": { "type": "string" },
           "description": "Additional arguments passed to CMake configure step."
@@ -45,7 +45,7 @@
         },
         "environment": {
           "type": "object", "additionalProperties": { "type": "string" },
-          "description": "Environment variables for CMake. Supports ${workspace} and ${orch} variables."
+          "description": "Environment variables for CMake. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${projectName}, ${env:NAME}."
         }
       },
       "required": ["name"]
@@ -91,7 +91,7 @@
         },
         "source_dir": {
           "type": "string",
-          "description": "Path to the CMake project directory (contains CMakeLists.txt). Supports ${workspace} and ${orch} variables."
+          "description": "Path to the CMake project directory (contains CMakeLists.txt). Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${projectName}, ${env:NAME}."
         },
         "profiles": {
           "type": "array",

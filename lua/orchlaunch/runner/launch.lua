@@ -82,8 +82,8 @@ local function launch_native_async(name, mode, on_done)
                 type = "launch",
                 adapter = M.launch_adapter(cfg),
                 program = program,
-                args = state.resolve_list(cfg.args),
-                cwd = state.resolve_path(cfg.cwd) or state.root(),
+                args = state.resolve_list(cfg.args, { target = cfg.target }),
+                cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
                 env = M.launch_environment(cfg),
             })
             on_done(config ~= nil)
@@ -92,8 +92,8 @@ local function launch_native_async(name, mode, on_done)
 
         local spec = {
             program = program,
-            args = state.resolve_list(cfg.args),
-            cwd = state.resolve_path(cfg.cwd) or state.root(),
+            args = state.resolve_list(cfg.args, { target = cfg.target }),
+            cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
             env = M.launch_environment(cfg),
             inherit_env = cfg.inherit_env ~= false,
             sudo = cfg.sudo == true,
@@ -313,7 +313,7 @@ function M.launch_environment(cfg)
     for key, value in pairs(cmake.profile_environment()) do
         env[key] = value
     end
-    for key, value in pairs(state.resolve_environment(cfg.environment)) do
+    for key, value in pairs(state.resolve_environment(cfg.environment, { target = cfg.target })) do
         env[key] = value
     end
     return env
@@ -361,8 +361,8 @@ local function launch_native(name, mode)
             type = "launch",
             adapter = M.launch_adapter(cfg),
             program = program,
-            args = state.resolve_list(cfg.args),
-            cwd = state.resolve_path(cfg.cwd) or state.root(),
+            args = state.resolve_list(cfg.args, { target = cfg.target }),
+            cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
             env = M.launch_environment(cfg),
         })
         return
@@ -395,8 +395,8 @@ local function launch_native(name, mode)
 
     local spec = {
         program = program,
-        args = state.resolve_list(cfg.args),
-        cwd = state.resolve_path(cfg.cwd) or state.root(),
+        args = state.resolve_list(cfg.args, { target = cfg.target }),
+        cwd = state.resolve_path(cfg.cwd, { target = cfg.target }) or state.root(),
         env = M.launch_environment(cfg),
         inherit_env = cfg.inherit_env ~= false,
         sudo = cfg.sudo == true,

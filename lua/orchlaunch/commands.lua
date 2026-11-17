@@ -767,6 +767,16 @@ function M.register()
         notify("the cursor is not inside a configuration", WARN)
     end, { desc = "Run the configuration under the cursor in run_configurations.json" })
 
+    vim.api.nvim_create_user_command("OrchLaunchNormalize", function()
+        if not ensure_loaded() then return end
+        local changed, report = require("orchlaunch.normalize").run()
+        if changed == 0 then
+            notify("run configurations already use macros; nothing to rewrite")
+            return
+        end
+        notify(("rewrote %d configuration(s):\n%s"):format(changed, table.concat(report, "\n")))
+    end, { desc = "Rewrite absolute build/source/target paths in run configurations as ${macros}" })
+
 end
 
 return M

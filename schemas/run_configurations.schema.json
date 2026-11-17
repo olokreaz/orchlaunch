@@ -72,7 +72,7 @@
             },
             "cwd": {
               "type": "string",
-              "description": "Working directory for the process. Supports ${workspace} and ${orch} variables."
+              "description": "Working directory for the process. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetPath}, ${projectName}, ${env:NAME}."
             },
             "args": {
               "type": "array",
@@ -92,7 +92,7 @@
             "environment": {
               "type": "object",
               "additionalProperties": { "type": "string" },
-              "description": "Additional environment variables. Supports ${workspace} and ${orch} variables."
+              "description": "Additional environment variables. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetPath}, ${projectName}, ${env:NAME}."
             },
             "console": {
               "$ref": "#/$defs/console"

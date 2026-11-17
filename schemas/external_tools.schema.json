@@ -24,11 +24,11 @@
           "program": {
             "type": "string",
             "minLength": 1,
-            "description": "Path to the program to execute. Supports ${workspace} and ${orch} variables."
+            "description": "Path to the program to execute. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetPath}, ${projectName}, ${env:NAME}."
           },
           "cwd": {
             "type": "string",
-            "description": "Working directory for the tool. Supports ${workspace} and ${orch} variables."
+            "description": "Working directory for the tool. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetPath}, ${projectName}, ${env:NAME}."
           },
           "args": {
             "type": "array",
@@ -48,7 +48,7 @@
           "environment": {
             "type": "object",
             "additionalProperties": { "type": "string" },
-            "description": "Additional environment variables. Supports ${workspace} and ${orch} variables."
+            "description": "Additional environment variables. Supports macros: ${workspace}, ${orch}, ${buildDir}, ${sourceDir}, ${buildType}, ${toolchain}, ${target}, ${targetPath}, ${projectName}, ${env:NAME}."
           }
         },
         "required": ["name", "program"],

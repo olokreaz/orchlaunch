@@ -378,23 +378,59 @@ end
 -- ============================================================================
 
 --- Context required to resolve project variables.
+--- `build_dir` / `source_dir` may be strings or lazy functions, so that resolving
+--- them never recurses into the path resolution that is calling `expand`.
 ---@class OrchResolveContext
 ---@field workspace string
 ---@field orch_dir string
+---@field build_dir? string|fun(): string
+---@field source_dir? string|fun(): string
+---@field build_type? string|fun(): string
+---@field toolchain? string|fun(): string
+---@field target? string Name of the CMake target the configuration points at.
+---@field target_path? string|fun(): string Built artifact of `target`, when known.
 
---- Expands `${workspace}` and `${orch}` references in a string.
+--- Macros understood in paths, arguments and environment values. Like CLion's
+--- CMake macros, these resolve from the project state at launch time:
+---   ${workspace}  project root            ${orch}        the .orch directory
+---   ${buildDir}   CMake binary dir        ${sourceDir}   CMake source dir
+---   ${buildType}  active build type       ${toolchain}   active toolchain name
+---   ${target}     the configuration's CMake target name
+---   ${targetPath} built artifact of that target (File API)
+---   ${projectName} basename of the workspace
+---   ${env:NAME}   environment variable NAME
+--- Unknown macros are left untouched so the mistake stays visible.
 ---@param value string
 ---@param ctx OrchResolveContext
 ---@return string
 function M.expand(value, ctx)
-    return (value:gsub("%${([%w_]+)}", function(name)
-        if name == "workspace" then
-            return ctx.workspace or ""
+    local function value_of(field)
+        if type(field) == "function" then
+            return field() or ""
         end
-        if name == "orch" then
-            return ctx.orch_dir or ""
+        return field or ""
+    end
+
+    local function resolve(name, env)
+        if name == "workspace" then return ctx.workspace or "" end
+        if name == "orch" then return ctx.orch_dir or "" end
+        if name == "projectName" then
+            return vim.fs.basename(ctx.workspace or "")
         end
-        return "${" .. name .. "}"
+        if name == "buildDir" then return value_of(ctx.build_dir) end
+        if name == "sourceDir" then return value_of(ctx.source_dir) end
+        if name == "buildType" then return value_of(ctx.build_type) end
+        if name == "toolchain" then return value_of(ctx.toolchain) end
+        if name == "target" then return ctx.target or "" end
+        if name == "targetPath" then return value_of(ctx.target_path) end
+        if env then return os.getenv(env) or "" end
+        return nil
+    end
+
+    return (value:gsub("%${(env:[%w_]+)}", function(full)
+        return resolve(nil, full:sub(5)) or ("${" .. full .. "}")
+    end):gsub("%${([%w_]+)}", function(name)
+        return resolve(name) or ("${" .. name .. "}")
     end))
 end
 

@@ -231,7 +231,8 @@ h.check("executable target got a run configuration", state.configuration("hello"
 h.eq("auto configuration is native", state.configuration("hello").type, "native")
 h.eq("executable runtime", state.configuration("hello").runtime, "executable")
 h.eq("auto configuration targets the target", state.configuration("hello").target, "hello")
-h.eq("auto configuration cwd is build dir", state.configuration("hello").cwd, cmake.binary_dir())
+h.eq("auto configuration cwd is the ${buildDir} macro", state.configuration("hello").cwd, "${buildDir}")
+h.eq("${buildDir} resolves to build dir", state.resolve_path("${buildDir}"), cmake.binary_dir())
 h.check("auto configuration builds before launch", (function()
     local step = state.configuration("hello").before.tools[1]
     return type(step) == "table" and step.type == "build" and step.target == "hello"
