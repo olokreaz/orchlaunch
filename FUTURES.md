@@ -42,6 +42,7 @@
 - [x] Панель: Continue/Pause/Step Over/In/Out/Restart/Stop/Toggle BP, авто-обновление по событиям
 - [x] Брейкпоинты: toggle, условие, логпоинт, менеджер, персистентность
 - [x] Реальные e2e: launch lldb+gdb, remote attach через `lldb-server`, условный брейкпоинт, контролы панели
+- [x] Аудит этапа 1: пять находок закреплены регрессионными тестами (`tests/audit_regressions_test.lua`)
 - [x] Remote-debug может сам поднять сервер (`server = "lldb-server" | "gdbserver"`): старт, ожидание порта, остановка с сессией
 - [x] Нативная отладка в tmux: breakpoint, Step In/Over/Out, Continue до выхода, проверка через `--remote-expr`
 - [x] Выбор конфигурации через `vim.ui.select` ставит курсор на её запись в `.orch`
@@ -80,7 +81,7 @@
 - [ ] Документация: troubleshooting sshfs/permissions
 - [ ] Поддержка package/workflow пресетов (сейчас импортятся configure/build/test)
 - [ ] Улучшения target discovery: кэширование по mtime build dir, инвалидация
-- [ ] Вынос CMake-части `runner.lua` (~1200 строк) в отдельный модуль: затрагивает публичный API, нужно согласие
+- [x] Разрез `runner.lua` (1245 строк) на модули `runner/`: cmake, before, launch, targets, state, persist; публичный API сохранён
 - [ ] Понятное сообщение для схемной ошибки `oneOf` (сейчас видно только в тестах через `jsonschema_lite`)
 - [ ] Команда для выбора записи с переходом (`select_entry_and_jump`) пока без пользовательской команды
 - [ ] Шаги (Into/Out) на remote-сессии проверены только для `lldb-server`, не для `gdbserver`
@@ -91,4 +92,4 @@
 - Attach к чужому PID может блокироваться `kernel.yama.ptrace_scope=1`
 - Remote-attach к `gdbserver` и `lldb-server` работает через клиент LLDB (lldb-dap); GDB-адаптер с `gdbserver` не проверен
 - При `gdbserver` nvim-dap показывает служебную остановку до `main` (строка 0) и выводит `E474`/`switchbuf`-предупреждение; сессия работает, это поведение nvim-dap
-- Проверено на Linux; Windows/macOS не тестировались
+- Поддерживается и проверяется только Linux. Windows и macOS не поддерживаются на данный момент (осознанное решение)
