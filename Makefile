@@ -37,3 +37,4 @@ e2e:
 	./tests/run.sh
 	./tests/func/run.sh
 	./tests/func/native_debug_run.sh
+	./tests/func/menu_run.sh
