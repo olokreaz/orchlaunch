@@ -10,6 +10,28 @@
 
 local M = {}
 
+--- Visual categories. Each one has its own icon and highlight group, so the
+--- completion menu tells macros, vars and env apart. `hl` names a group defined
+--- in `M.highlights()`, which links to a standard group and follows the theme.
+M.KINDS = {
+    macro = { icon = "󰅩", hl = "OrchLaunchCompletionMacro", name = "Macro" },
+    var = { icon = "󰀫", hl = "OrchLaunchCompletionVar", name = "Variable" },
+    env = { icon = "󰆧", hl = "OrchLaunchCompletionEnv", name = "Environment" },
+    keyword = { icon = "󰌌", hl = "OrchLaunchCompletionKeyword", name = "Prefix" },
+}
+
+--- Highlight groups and the standard groups they link to. Linked, not coloured,
+--- so a colourscheme change restyles them without any code change.
+---@return table<string, string> group -> link target
+function M.highlights()
+    return {
+        OrchLaunchCompletionMacro = "Include",
+        OrchLaunchCompletionVar = "Identifier",
+        OrchLaunchCompletionEnv = "Constant",
+        OrchLaunchCompletionKeyword = "Keyword",
+    }
+end
+
 --- Macros documented in config.expand, with a short description each.
 M.MACROS = {
     { label = "workspace", detail = "project root" },
@@ -78,33 +100,30 @@ end
 ---   "env:"    -> environment variables
 ---@param prefix string
 ---@param bufnr integer
----@return { label: string, insert: string, detail: string }[]
+---@return { label: string, insert: string, detail: string, kind: table }[]
 function M.items(prefix, bufnr)
     local out = {}
+    local K = M.KINDS
     if prefix:sub(1, 4) == "env:" then
         for _, name in ipairs(M.env_names()) do
-            out[#out + 1] = { label = "env:" .. name, insert = "env:" .. name .. "}", detail = "environment variable" }
+            out[#out + 1] = { label = "env:" .. name, insert = "env:" .. name .. "}", detail = "environment variable", kind = K.env }
         end
         return out
     end
 
     if prefix:sub(1, 4) == "var:" then
         for _, name in ipairs(M.var_names(bufnr)) do
-            out[#out + 1] = { label = "var:" .. name, insert = "var:" .. name .. "}", detail = "vars." .. name }
+            out[#out + 1] = { label = "var:" .. name, insert = "var:" .. name .. "}", detail = "from this step's vars", kind = K.var }
         end
-        -- `${var:name?default}` form is offered by hand, the default is typed.
         return out
     end
 
     for _, m in ipairs(M.MACROS) do
-        out[#out + 1] = { label = m.label, insert = m.label .. "}", detail = m.detail }
+        out[#out + 1] = { label = m.label, insert = m.label .. "}", detail = m.detail, kind = K.macro }
     end
-    out[#out + 1] = { label = "var:", insert = "var:", detail = "value from the step's vars" }
-    out[#out + 1] = { label = "env:", insert = "env:", detail = "environment variable" }
+    out[#out + 1] = { label = "var:", insert = "var:", detail = "value from the step's vars", kind = K.keyword }
+    out[#out + 1] = { label = "env:", insert = "env:", detail = "environment variable", kind = K.keyword }
     return out
 end
 
---- blink.cmp source. Register with:
----   sources.providers.orchlaunch = { name = "orchlaunch", module = "orchlaunch.completion.blink" }
---- and add "orchlaunch" to `sources.default` (or to `per_filetype.json`).
 return M
