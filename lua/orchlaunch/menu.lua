@@ -180,17 +180,6 @@ local function actions()
         { label = "Toggle breakpoint", run = cmd("OrchLaunchToggleBreakpoint") },
         { label = "Breakpoints list", run = cmd("OrchLaunchBreakpoints") },
         { label = "Debugger panel", run = cmd("OrchLaunchDebugger") },
-        {
-            label = "Run external tool…",
-            run = function()
-                select.select_external_tool({
-                    prompt = "Run which external tool?",
-                    on_select = function(t)
-                        runner.run_external_tool_async(t.name)
-                    end,
-                })
-            end,
-        },
         { label = "Browser (configurations)", run = cmd("OrchLaunch") },
         { label = "Toolchains", run = cmd("OrchLaunchToolchains") },
         { label = "External tools", run = cmd("OrchLaunchExternalTools") },
@@ -370,18 +359,6 @@ function M.setup_keymaps(prefix)
                 vim.cmd("OrchLaunchDebugger")
             end,
             "Debugger panel",
-        },
-        {
-            "e",
-            function()
-                select.select_external_tool({
-                    prompt = "Run which external tool?",
-                    on_select = function(t)
-                        runner.run_external_tool_async(t.name)
-                    end,
-                })
-            end,
-            "External tool",
         },
     }
 

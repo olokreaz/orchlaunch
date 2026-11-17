@@ -113,6 +113,19 @@ valid("legacy root-level CMake profiles validate", "cmake_settings",
 valid("legacy root-level flat CMake settings validate", "cmake_settings",
     '{ "name": "Default", "build_dir": "build", "generator": "Ninja", "ctest": "ctest" }')
 
+-- before-launch external steps: args/env/vars are allowed, nothing else is
+local EXT_BASE = '{"configurations":[{"name":"G","type":"native","target":"g","before":{"tools":[%s]}}]}'
+valid("external step with args, env and vars validates", "run_configurations",
+    EXT_BASE:format('{"type":"external","tool":"gen","vars":{"var1":"foo"},"args":["--opt","${var:var1}"],"env":{"V":"1"}}'))
+invalid("external step rejects an unknown key", "run_configurations",
+    EXT_BASE:format('{"type":"external","tool":"gen","colour":"red"}'))
+invalid("external step rejects non-string vars values", "run_configurations",
+    EXT_BASE:format('{"type":"external","tool":"gen","vars":{"n":1}}'))
+invalid("external step requires tool", "run_configurations",
+    EXT_BASE:format('{"type":"external"}'))
+valid("build step still validates", "run_configurations",
+    EXT_BASE:format('{"type":"build","target":"g"}'))
+
 -- ---- 4. files written by the plugin validate -------------------------------------
 local messages = {}
 vim.notify = function(msg)
