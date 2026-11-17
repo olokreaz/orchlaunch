@@ -73,6 +73,14 @@
 - [x] E2E: `e2e_cmake_test.lua` (presets → configure → targets → build → run → ctest → install), `e2e_runner_test.lua`, `e2e_ui_test.lua` (fibrous формы/диалоги)
 - [x] Реальный debug: `e2e_debug_lldb_test`, `e2e_debugger_panel_test`, `e2e_debug_backends_test`, `e2e_debug_attach_test`, `e2e_debug_controls_test`, `e2e_debug_breakpoints_test`
 - [x] Функциональные в tmux: `tests/func/run.sh` (6 сценариев)
+- [x] Функциональные в tmux: `tests/func/menu_run.sh` (меню `<leader>o`, статусная строка, `<leader>or` доходит до runner)
+
+## Меню и клавиши (`menu.lua`)
+- [x] Единое меню `setup_keymaps("<leader>o")`: запуск/отладка, выбор конфигураций, профилей и target, сборка, CTest, breakpoints, отладчик
+- [x] Статусная строка `statusline()` (конфигурация · профиль · target) для lualine
+- [x] Клавиши и подписи which-key в конфиге пользователя (`lua/plugins/project_spec.lua`); плагин сам клавиш не назначает
+- [ ] Проверка подписей which-key и lualine в тесте (сейчас проверено вручную в живом Neovim)
+- [ ] Выбор клавиш и префикса через `opts`, а не захардкоженный `<leader>o`
 
 ## Не реализовано (планы)
 - [ ] Compound: stop-on-failure / continue-on-error, таймауты, параллельный запуск
