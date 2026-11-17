@@ -94,6 +94,17 @@ h.eq("remote-debug line", remote and remote.lnum, 12)
 local weird = find(d, "Unknown configuration type: teleport", SEV.WARN)
 h.check("unknown type warns", weird ~= nil)
 h.eq("unknown type line", weird and weird.lnum, 13)
+-- A misspelled type is explained by our own diagnostic on the value's line and
+-- column. The schema (oneOf of const variants) also reports, but its wording is
+-- jsonls'; the plugin message is the one that must stay precise.
+do
+    local typo = table.concat({ "{", '  "configurations": [', '    { "name": "x", "type": "nativ", "target": "app" }', "  ]", "}" }, "\n")
+    local td = validate.check("run_configurations", typo, { toolchains = {}, tools = {} })
+    local msg = find(td, "Unknown configuration type: nativ", SEV.WARN)
+    h.check("typo gets the plugin's explicit message", msg ~= nil, vim.inspect(td))
+    h.eq("typo message points at the type value's line", msg and msg.lnum, 2)
+    h.check("typo message points at the value column", msg and msg.col >= 26, msg and tostring(msg.col))
+end
 
 local tool = find(d, "unknown external tool: ghost-tool", SEV.WARN)
 h.check("before-launch unknown external tool warns", tool ~= nil)

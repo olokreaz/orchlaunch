@@ -82,7 +82,7 @@
 - [ ] Поддержка package/workflow пресетов (сейчас импортятся configure/build/test)
 - [ ] Улучшения target discovery: кэширование по mtime build dir, инвалидация
 - [x] Разрез `runner.lua` (1245 строк) на модули `runner/`: cmake, before, launch, targets, state, persist; публичный API сохранён
-- [ ] Понятное сообщение для схемной ошибки `oneOf` (сейчас видно только в тестах через `jsonschema_lite`)
+- [x] Опечатка в `type` объясняется понятно: плагин пишет `Unknown configuration type: X` на значении поля (закреплено тестом). Схемные строки `jsonls` (`oneOf` по `const`) остаются: их текст задаёт `jsonls`, а `const` нужен для подсказок полей
 - [ ] Шаги (Into/Out) на remote-сессии проверены только для `lldb-server`, не для `gdbserver`
 
 ## Известные ограничения
