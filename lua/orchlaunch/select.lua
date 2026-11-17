@@ -297,34 +297,6 @@ function M.select_cmake_preset(opts)
     end)
 end
 
---- Picks a run configuration with vim.ui.select and moves the cursor to its
---- entry in run_configurations.json. Unlike select_and_run, nothing is run.
----@param opts? { prompt?: string }
-function M.select_entry_and_jump(opts)
-    opts = opts or {}
-    if not state.is_loaded() then
-        vim.notify("[orchlaunch] no .orch project loaded", vim.log.levels.WARN)
-        return
-    end
-
-    local configs = state.run_configurations().configurations
-    if #configs == 0 then
-        vim.notify("[orchlaunch] no run configurations defined", vim.log.levels.WARN)
-        return
-    end
-
-    vim.ui.select(configs, {
-        prompt = opts.prompt or "Go to configuration:",
-        format_item = function(cfg)
-            return string.format("%s  [%s]", cfg.name, cfg.type)
-        end,
-    }, function(choice)
-        if choice then
-            require("orchlaunch.edit").open("run_configurations", choice.name, { whole_file = false })
-        end
-    end)
-end
-
 --- Generic selection helper for any list of named items.
 ---@param items table[]
 ---@param opts { prompt?: string, format_item?: fun(item: table): string, on_select: fun(item: table) }

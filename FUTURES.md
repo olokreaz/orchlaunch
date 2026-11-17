@@ -45,7 +45,7 @@
 - [x] Аудит этапа 1: пять находок закреплены регрессионными тестами (`tests/audit_regressions_test.lua`)
 - [x] Remote-debug может сам поднять сервер (`server = "lldb-server" | "gdbserver"`): старт, ожидание порта, остановка с сессией
 - [x] Нативная отладка в tmux: breakpoint, Step In/Over/Out, Continue до выхода, проверка через `--remote-expr`
-- [x] Выбор конфигурации через `vim.ui.select` ставит курсор на её запись в `.orch`
+- [x] Переход к записи конфигурации в `.orch` через `:OrchLaunchEdit configs <имя>`
 - [x] Preflight `:OrchLaunchCheck` (инструменты + интеграции)
 
 ## UI (fibrous)
@@ -83,7 +83,6 @@
 - [ ] Улучшения target discovery: кэширование по mtime build dir, инвалидация
 - [x] Разрез `runner.lua` (1245 строк) на модули `runner/`: cmake, before, launch, targets, state, persist; публичный API сохранён
 - [ ] Понятное сообщение для схемной ошибки `oneOf` (сейчас видно только в тестах через `jsonschema_lite`)
-- [ ] Команда для выбора записи с переходом (`select_entry_and_jump`) пока без пользовательской команды
 - [ ] Шаги (Into/Out) на remote-сессии проверены только для `lldb-server`, не для `gdbserver`
 
 ## Известные ограничения
