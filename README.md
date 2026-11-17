@@ -301,6 +301,37 @@ follow it.
 `embedded`, `hidden` or `none`. Supported types: `native`, `remote-debug`,
 `compound` (runs child configurations in order).
 
+#### Remote debugging on localhost
+
+A `remote-debug` configuration attaches to a debug server on `connection`
+(`host:port`). Two ways to get a server:
+
+- **Plugin-managed** — set `server` (`"lldb-server"` or `"gdbserver"`). The
+  plugin starts the server for the program in `symbol`, waits until it listens,
+  attaches, and stops the server when the session ends:
+
+  ```json
+  {
+    "configurations": [
+      {
+        "name": "Remote tick",
+        "type": "remote-debug",
+        "symbol": "${workspace}/build/prog",
+        "connection": "localhost:1234",
+        "adapter": "lldb",
+        "server": "lldb-server"
+      }
+    ]
+  }
+  ```
+
+- **Started by you** — leave `server` out and start the server yourself, e.g.
+  `lldb-server gdbserver :1234 -- ./build/prog`, then debug as usual.
+
+`symbol` is the local executable with debug info (used for symbols and the
+program name). `adapter` is `lldb` (lldb-dap) or `gdb`. A `server` without a
+`symbol` is reported as an error.
+
 ### External tools — `external_tools.json`
 
 ```json

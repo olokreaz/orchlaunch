@@ -18,6 +18,7 @@ local SEV = vim.diagnostic.severity
 
 local TOOLCHAIN_TYPES = { system = true, unix = true, msvc = true }
 local CONFIGURATION_TYPES = { native = true, ["remote-debug"] = true, compound = true }
+local REMOTE_SERVERS = { ["lldb-server"] = true, gdbserver = true }
 
 ---@class OrchDiagnostic
 ---@field lnum integer
@@ -243,6 +244,23 @@ local function check_run_configurations(root, ctx)
         elseif kind == "remote-debug" then
             if not is_nonempty_string(jsonpos.get(cfg, "connection")) then
                 out[#out + 1] = at_object(cfg, SEV.ERROR, "remote-debug configuration requires 'connection' (host:port)")
+            end
+            local server = jsonpos.get_string(cfg, "server")
+            if server and server ~= "" and not REMOTE_SERVERS[server] then
+                out[#out + 1] = at_key(
+                    cfg,
+                    "server",
+                    SEV.ERROR,
+                    ("unknown debug server '%s' (use lldb-server or gdbserver)"):format(server)
+                )
+            end
+            if server and server ~= "" and not is_nonempty_string(jsonpos.get(cfg, "symbol")) then
+                out[#out + 1] = at_key(
+                    cfg,
+                    "server",
+                    SEV.ERROR,
+                    "remote-debug with a 'server' needs a 'symbol' (the program the server runs)"
+                )
             end
         elseif kind == "compound" then
             local array = jsonpos.get(cfg, "configurations")

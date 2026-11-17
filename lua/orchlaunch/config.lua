@@ -561,6 +561,7 @@ end
 ---@field symbol? string
 ---@field connection string
 ---@field adapter? string
+---@field server? "lldb-server" | "gdbserver" Start this debug server for the program in `symbol`.
 ---@field before? OrchBefore
 
 ---@param opts OrchRemoteDebugOptions
@@ -575,6 +576,7 @@ function M.remote_debug(opts)
         symbol = opts.symbol,
         connection = opts.connection,
         adapter = opts.adapter,
+        server = opts.server,
         before = opts.before,
     }
 end

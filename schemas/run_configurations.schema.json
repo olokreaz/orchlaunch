@@ -126,6 +126,11 @@
               "type": "string",
               "enum": ["gdb", "lldb"],
               "description": "Debug adapter to use for the remote connection."
+            },
+            "server": {
+              "type": "string",
+              "enum": ["lldb-server", "gdbserver"],
+              "description": "Debug server the plugin starts for `symbol` before attaching. Leave empty to use a server you started yourself."
             }
           },
           "required": ["connection"],

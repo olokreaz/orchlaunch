@@ -144,6 +144,7 @@ function M.stop()
         pcall(d.close)
     end
     session.reset()
+    pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "OrchLaunchDebugStopped" })
 end
 
 function M.continue()

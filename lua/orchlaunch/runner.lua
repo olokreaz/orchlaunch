@@ -617,6 +617,43 @@ local function launch_native_async(name, mode, on_done)
     end)
 end
 
+--- Starts the debug server a remote-debug configuration asks for (`server`),
+--- waits until it listens and stops it with the debug session. Returns false
+--- with a message when the server cannot be started; true otherwise (also when
+--- no server is configured, so an external server keeps working).
+---@param cfg table
+---@return boolean
+local function start_remote_server(cfg)
+    if not cfg.server or cfg.server == "" then
+        return true
+    end
+    local server = require("orchlaunch.debug.server")
+    local port = tonumber((cfg.connection or ""):match(":(%d+)$"))
+    if not port then
+        notify(("remote-debug %q: connection must be host:port"):format(cfg.name), ERROR)
+        return false
+    end
+    local handle, err = server.start(cfg.server, port, state.resolve_path(cfg.symbol))
+    if not handle then
+        notify(("remote-debug %q: %s"):format(cfg.name, err), ERROR)
+        return false
+    end
+    if not server.wait_listening(port, 10000) then
+        handle.stop()
+        notify(("remote-debug %q: %s did not listen on port %d"):format(cfg.name, cfg.server, port), ERROR)
+        return false
+    end
+    -- Stop the server once this debug session ends.
+    vim.api.nvim_create_autocmd("User", {
+        pattern = "OrchLaunchDebugStopped",
+        once = true,
+        callback = function()
+            handle.stop()
+        end,
+    })
+    return true
+end
+
 --- Asynchronous remote-debug path.
 ---@param name string
 ---@param mode "run" | "debug"
@@ -634,10 +671,14 @@ local function launch_remote_debug_async(name, mode, on_done)
             on_done(false)
             return
         end
+        if not start_remote_server(cfg) then
+            on_done(false)
+            return
+        end
         local config = require("orchlaunch.debug").start(cfg, {
             type = "attach",
             connection = cfg.connection,
-            program = cfg.symbol,
+            program = state.resolve_path(cfg.symbol),
         })
         on_done(config ~= nil)
     end)
@@ -903,8 +944,11 @@ local function launch_remote_debug(name, mode)
     if not run_before(cfg.before) then
         return
     end
+    if not start_remote_server(cfg) then
+        return
+    end
     local dbg = require("orchlaunch.debug")
-    dbg.start(cfg, { type = "attach", connection = cfg.connection, program = cfg.symbol })
+    dbg.start(cfg, { type = "attach", connection = cfg.connection, program = state.resolve_path(cfg.symbol) })
 end
 
 --- Runs (or debugs) a configuration by name.
