@@ -183,6 +183,21 @@ if locals then
 end
 h.check("attached frame argument visible", names.n == true, vim.inspect(vim.tbl_keys(names)))
 
+-- One Step Over from the breakpoint line must stop exactly once, on the next
+-- source line (`return sink;`), with no extra stopped events in between.
+local next_line = tick_line + 1
+local stops_during_step = 0
+local dap_for_count = require("dap")
+dap_for_count.listeners.after.event_stopped["orch_attach_step_count"] = function()
+    stops_during_step = stops_during_step + 1
+end
+dbg.step_over()
+h.check("step over lands on the next line", wait_for(function()
+    return dbg.status() == "stopped" and dbg.current_frame() ~= nil and dbg.current_frame().line == next_line
+end, 15000), (dbg.current_frame() or {}).line)
+vim.wait(1000, function() return false end, 25)
+h.eq("exactly one stop for one step over", stops_during_step, 1)
+
 dbg.stop()
 vim.fn.jobstop(server)
 wait_for(function()
