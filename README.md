@@ -100,6 +100,23 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 }
 ```
 
+If you keep the plugin as a local directory instead of a git module, point
+lazy.nvim at the path (`dir` tells lazy to use the folder as is, without
+cloning or updating it):
+
+```lua
+{
+  dir = vim.fn.expand("~/.config/nvim/lua/orchlaunch"), -- your local checkout
+  name = "orchlaunch",
+  dependencies = {
+    "mbrea-c/fibrous.nvim",  -- optional
+  },
+  config = function()
+    require("orchlaunch").setup({ silent = true })
+  end,
+}
+```
+
 `setup()` registers the user commands, watches `DirChanged` and loads the
 `.orch` project containing the current directory. Options:
 
@@ -429,6 +446,7 @@ The new default UI edits configuration files as plain JSON buffers:
 | `:OrchLaunchCMakeProject` | Set the CMake project directory |
 | `:OrchLaunchImportCMakePresets` | Import CMake presets as disabled profiles |
 | `:OrchLaunchLoadCMake` | Configure the project and load its CMake targets |
+| `:OrchLaunchRefreshTargets` | Discover CMake targets from an existing build directory (no configure) |
 | `:OrchLaunchTargets` | Browse CMake targets (buffer: vim.ui.select, fibrous: browser) |
 | `:OrchLaunchConfigure` | Configure with the active CMake profile |
 | `:OrchLaunchBuild [target]` | Build the project or a single target |
@@ -494,8 +512,11 @@ orchlauncher/
 │   ├── validate.lua    -- semantic validation (diagnostics)
 │   ├── edit.lua        -- buffer-based editing UI
 │   ├── select.lua      -- vim.ui.select based pickers
+│   ├── tool_spec.lua   -- external tool -> process spec (shared defaults)
+│   ├── notify.lua      -- one "[orchlaunch]" message helper
 │   ├── schemas.lua     -- JSON Schema registration for jsonls
-│   ├── debug/          -- DAP glue: backends (lldb, gdb) + neutral session
+│   ├── debug/          -- DAP glue: backends (lldb, gdb), neutral session,
+│   │                      and server.lua (plugin-managed lldb-server/gdbserver)
 │   └── ui/             -- fibrous.nvim UI (optional)
 │       ├── init.lua    -- shared helpers (notifications, env parsing)
 │       ├── fibrous/    -- renderer glue, forms, browser, editors, debugger
@@ -513,16 +534,27 @@ orchlauncher/
 
 ## Development
 
-The test suite is headless and runs all `*_test.lua` files. It resolves the
-plugin root and its dependencies relative to itself, so no paths are hardcoded:
+Tests run in an isolated Neovim profile (`NVIM_APPNAME=orch-test`) and never
+load your own configuration:
 
 ```sh
-tests/run.sh
+make lint    # stylua + luacheck + shell syntax
+make test    # unit and integration tests (headless)
+make e2e     # fixture build, unit tests, tmux UI test, native-debug tmux test
 ```
+
+Real debugger tests (`lldb-dap`, `gdb`, `lldb-server`, `gdbserver`, `clang++`)
+skip with a message when a tool is missing; they never fail for a missing tool.
+The tmux tests use their own server (`tmux -L orch`) and do not touch your
+tmux sessions.
+
+The test suite is headless and runs all `*_test.lua` files. It resolves the
+plugin root and its dependencies relative to itself, so no paths are hardcoded.
+Run it through `make test` (it sets `NVIM_APPNAME=orch-test` for you).
 
 Dependencies are looked up in `stdpath("data")/lazy` (and the other standard
 plugin locations); point `ORCHLAUNCH_DEPS` at a directory containing them
-(`fibrous.nvim`) to override.
+(`fibrous.nvim`, `nvim-dap`, `plenary.nvim`) to override.
 
 ## License
 
