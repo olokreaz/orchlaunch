@@ -82,19 +82,7 @@ vim.fn.sign_define("DapBreakpoint", { text = "B" })
 vim.cmd("edit " .. vim.fn.fnameescape(root .. "/prog.cpp"))
 
 local function port_listening(port)
-    local file = io.open("/proc/net/tcp", "r")
-    if not file then
-        return false
-    end
-    local needle = (":%04X"):format(port)
-    for line in file:lines() do
-        if line:find(needle, 1, true) and line:find(" 0A ", 1, true) then
-            file:close()
-            return true
-        end
-    end
-    file:close()
-    return false
+    return require("orchlaunch.debug.server").listening(port)
 end
 
 local orch = require("orchlaunch")
