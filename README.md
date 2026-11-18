@@ -29,7 +29,13 @@ target discovery — driven from JSON files inside a `.orch` project.
   Debug. Types: `native`, `remote-debug`, `compound`.
 - **Native run** — embedded/external console, program arguments, environment,
   working directory, `sudo`, and before-launch steps (build / install /
-  external tools).
+  external tools / `exec`).
+- **Before-launch output** — one output window per run, with a configurable
+  policy (`showIfError` by default, `show`, `none`, or a file). Set once on the
+  `before` block, overridable per step.
+- **Macros** — CLion-style `${buildDir}`, `${targetName}`, `${var:name}`,
+  `${env:NAME}` and more in paths, arguments and environment values.
+  Completion for them in blink.cmp.
 - **Toolchains** — C/C++/CMake/debugger paths and environment, referenced by
   name so configurations never duplicate compiler paths. The toolchain debugger
   is the default for native configurations.
@@ -54,6 +60,9 @@ target discovery — driven from JSON files inside a `.orch` project.
 - **JSON Schema & validation** — autocompletion, hover docs, and semantic
   validation (unknown targets, missing toolchains, cycles, etc.) via
   `jsonls` (vscode-json-language-server).
+- **`${...}` completion** — a blink.cmp source offers macros, declared `vars`
+  and environment variables inside `.orch/*.json`. See
+  [DOCUMENTATION.md](DOCUMENTATION.md#completion-in-blinkcmp).
 - **Active configuration** — remembered per project (outside `.orch`).
 
 ## Debugging

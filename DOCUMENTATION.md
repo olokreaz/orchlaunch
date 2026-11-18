@@ -229,6 +229,101 @@ Supported types: `native`, `remote-debug`, `compound`. For `native`, `runtime`
 records the CMake target kind (`executable`, `static`, `shared`, `module`,
 `object`, `utility`, ...); only executables have a `target`.
 
+### Before-launch steps
+
+`before` runs in order before the configuration starts. It stops at the first
+failing step. Each entry is one of:
+
+| Step | Meaning |
+| --- | --- |
+| `"build"`, `"install"` | CMake build/install of the whole project |
+| `{ "type": "build", "target": "bar" }` | Build one CMake target |
+| `{ "type": "external", "tool": "gen" }` | Run a tool from `external_tools.json` |
+| `{ "type": "exec", "argv": [...] }` | Run a program directly, no shell |
+
+External tools are run only from run configurations (there is no editor command
+for them). A tool can be given per-step values:
+
+```json
+"before": { "tools": [
+  { "type": "external", "tool": "gen-assets",
+    "vars": { "var1": "foo" },
+    "args": ["--opt", "${var:var1}", "--dist", "${buildDir}/gen/${target}/"],
+    "env":  { "GEN_VERBOSE_LOG": "${workspace}/${target}/logs" } }
+] }
+```
+
+`args` are appended after the tool's own arguments, `env` overrides the
+tool's environment for this call, and `vars` feed `${var:name}`.
+
+#### `exec` steps and `capture`
+
+`exec` runs `argv` as given, without a shell, so `$HOME` stays literal. To use
+a shell, say so explicitly with `sh -c`. `capture` stores the step's stdout
+(trailing newlines removed) as a variable for later steps:
+
+```json
+"before": { "tools": [
+  { "type": "exec", "argv": ["uname", "-a"], "capture": "uname" },
+  { "type": "exec", "argv": ["sh", "-c", "hostname | tr '[:lower:]' '[:upper:]'"],
+    "capture": "host" },
+  { "type": "external", "tool": "gen-assets",
+    "args": ["--foo", "${var:uname}", "--host", "${var:host}"] }
+] }
+```
+
+Captured values are read with `${var:name}`. `capture` names must be plain
+identifiers. Shell-style `${!command!}` substitution is not supported: a command
+must be a visible step.
+
+#### Output: `log`
+
+Process steps (`exec` and `external`) print their output to one output window
+per run. `log` sets the policy; it can be set once on the `before` block and
+overridden on any single step:
+
+```json
+"before": { "log": "showIfError", "tools": [
+  { "type": "exec", "argv": ["make", "-j4"] },
+  { "type": "exec", "argv": ["date"], "log": "none" },
+  { "type": "external", "tool": "gen-assets", "log": { "file": "${tempDir}/orch/gen.log" } }
+] }
+```
+
+| Policy | On success | On failure |
+| --- | --- | --- |
+| `showIfError` (default) | quiet; output kept in the window | the window opens with everything the step printed |
+| `show` | the window opens | the window opens |
+| `none` | nothing | one notification with the last stderr line |
+| `{ "file": "..." }` | written to the file | written to the file |
+
+The window is a scratch buffer named `[orchlaunch] before: <name>`, opened in a
+bottom split (12 lines, not floating). Every step appends to it, tagged
+`[out]` or `[err]` under a `== step ==` header. A file policy writes the same
+tagged lines and does not open the window.
+
+#### Macros
+
+Paths, arguments and environment values accept these macros. They are expanded
+when the step runs, so the values reflect the active project:
+
+| Macro | Value |
+| --- | --- |
+| `${workspace}`, `${projectDir}` | project root |
+| `${orch}` | the `.orch` directory |
+| `${buildDir}`, `${sourceDir}`, `${sourceParentDir}` | CMake build / source / source parent |
+| `${buildType}`, `${toolchain}` | active build type and toolchain |
+| `${target}`, `${targetName}` | the configuration's CMake target (`targetName` also works for libraries) |
+| `${targetPath}`, `${targetDir}` | built artifact and its directory (empty until built) |
+| `${projectName}` | basename of the workspace |
+| `${userHome}` | home directory |
+| `${tempDir}` (alias `${tmp}`) | system temporary directory |
+| `${osName}` | operating system name |
+| `${env:NAME}` | environment variable `NAME` |
+| `${var:name}`, `${var:name?default}` | a value from `vars` or a `capture` |
+
+Unknown macros are left as written, so a typo stays visible.
+
 ## External tools — `external_tools.json`
 
 ```json
@@ -301,6 +396,49 @@ attaches to a buffer inside `.orch/`, the schemas are added to its settings
 next to the ones you already configured, giving completion, hover text and
 structure checks. `:OrchLaunchCheck` reports whether it is installed, running
 and has the schemas.
+
+#### Completion in blink.cmp
+
+JSON Schema cannot complete text inside a string, so macros get their own
+completion source for [blink.cmp](https://github.com/saghen/blink.cmp). Inside
+`.orch/*.json` files, after `${`, it offers:
+
+- the macros in the table above, each with its description;
+- `var:` followed by the names declared in `vars` of the same file;
+- `env:` followed by the environment variables currently set.
+
+Each kind has its own icon and highlight group, so macros, variables and
+environment entries are easy to tell apart. The highlight groups are linked to
+standard groups (`Include`, `Identifier`, `Constant`, `Keyword`), so they follow
+your colourscheme. They are defined with `default = true`, so a colourscheme
+can override them.
+
+Register the source in your blink configuration:
+
+```lua
+{
+  "saghen/blink.cmp",
+  opts = function(_, opts)
+    opts.sources = opts.sources or {}
+    opts.sources.providers = opts.sources.providers or {}
+    opts.sources.providers.orchlaunch = {
+      name = "OrchLaunch",
+      module = "orchlaunch.completion.blink",
+    }
+    local default = opts.sources.default or { "lsp", "path", "snippets", "buffer" }
+    if not vim.tbl_contains(default, "orchlaunch") then
+      table.insert(default, "orchlaunch")
+    end
+    opts.sources.default = default
+    return opts
+  end,
+}
+```
+
+The source is only active inside `.orch/*.json`. The logic is in
+`orchlaunch.completion` (pure, testable without blink); the blink adapter is in
+`orchlaunch.completion.blink`. Icons use Nerd Font glyphs; if they do not
+render, change `KINDS` in `completion.lua`.
 
 ### Options
 
@@ -476,8 +614,10 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 ### Before-launch steps
 - Build (CMake build) — runs `cmake --build` with active profile/preset or manual settings.
 - Install (CMake install) — runs `cmake --install`.
-- External tool — runs a named external tool from `external_tools.json`.
-- Custom command — runs an arbitrary program+args with cwd/env.
+- External tool — runs a named tool from `external_tools.json`, with per-step args, env and vars.
+- Exec — runs `argv` directly (no shell) with optional `capture` and `log`.
+- Output policy — `runner/output.lua` decides, `runner/window.lua` shows; one window per run.
+- Macros — `config.expand` resolves every macro; `${var:...}` reads step vars and captures.
 
 ### Console modes
 - embedded: runs in Neovim terminal (termopen)
@@ -486,7 +626,7 @@ The plugin provides a complete CLion-like run/debug configuration system for Neo
 
 ### External tools
 - Named external tools with program, args, cwd, env, sudo, inherit_env.
-- Can be invoked standalone or as before-launch step.
+- Run only as before-launch steps of a run configuration (no editor command).
 - Managed via UI list (New/Edit/Delete) or commands.
 
 ### Toolchains
