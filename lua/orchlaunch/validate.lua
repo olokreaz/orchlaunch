@@ -416,6 +416,14 @@ local function check_toolchains(root)
         if is_nonempty_string(kind) and not TOOLCHAIN_TYPES[kind.value] then
             out[#out + 1] = at_node(kind, SEV.WARN, ("Unknown toolchain type: %s (expected system, unix or msvc)"):format(kind.value))
         end
+        local sysroot = jsonpos.get(tc, "sysroot")
+        if sysroot then
+            if not is_nonempty_string(sysroot) then
+                out[#out + 1] = at_node(sysroot, SEV.ERROR, "Toolchain 'sysroot' must be a non-empty string")
+            elseif not (is_nonempty_string(kind) and kind.value == "unix") then
+                out[#out + 1] = at_node(sysroot, SEV.WARN, "Toolchain 'sysroot' is only used when type is unix; it is ignored here")
+            end
+        end
     end
     return out
 end

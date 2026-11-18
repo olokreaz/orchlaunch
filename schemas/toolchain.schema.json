@@ -46,6 +46,21 @@
             "minLength": 1,
             "description": "Debug adapter to use: gdb or lldb."
           },
+          "sysroot": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Cross-build sysroot, passed to CMake as -DCMAKE_SYSROOT. Only applies to type \"unix\". Relative paths resolve against .orch."
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Clang target triple for type \"msvc\". Default x86_64-pc-windows-msvc."
+          },
+          "sdk": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Windows SDK + CRT root for type \"msvc\" (crt/ and sdk/ layout, e.g. xwin splat output). Relative paths resolve against .orch."
+          },
           "environment": {
             "type": "object",
             "additionalProperties": { "type": "string" },

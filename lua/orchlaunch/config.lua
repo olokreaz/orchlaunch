@@ -725,6 +725,9 @@ end
 ---@field cxx string
 ---@field debugger string
 ---@field environment? OrchEnvironment
+---@field sysroot? string
+---@field target? string
+---@field sdk? string
 
 ---@param opts OrchToolchainOptions
 ---@return OrchToolchain
@@ -744,6 +747,9 @@ function M.toolchain(opts)
         cxx = opts.cxx,
         debugger = opts.debugger,
         environment = opts.environment,
+        sysroot = opts.sysroot,
+        target = opts.target,
+        sdk = opts.sdk,
     }
 end
 

@@ -535,18 +535,30 @@ function M.has_compilers(resolved)
         or cache.CMAKE_TOOLCHAIN_FILE ~= nil
 end
 
---- Builds the `-DCMAKE_*_COMPILER` arguments that apply `toolchain` to a
---- preset that does not define compilers of its own.
+local MSVC_TARGET = "x86_64-pc-windows-msvc"
+
+--- Builds the `-DCMAKE_*` arguments that apply `toolchain` to a preset that
+--- does not define compilers of its own.
+---
+--- - every type: `-DCMAKE_C_COMPILER` / `-DCMAKE_CXX_COMPILER`;
+--- - `unix`: `-DCMAKE_SYSROOT` when `sysroot` is set (cross build);
+--- - `msvc`: a Windows target driven by clang-cl/lld-link on any host. With
+---   `sdk` (a Windows SDK + CRT root, e.g. `xwin splat` output) the include and
+---   library search paths are passed as `/imsvc` and `/libpath:` flags.
 ---@param resolved table?
 ---@param toolchain OrchToolchain?
 ---@param resolve_tool? fun(value: string): string
+---@param resolve_path? fun(value: string): string
 ---@return string[]
-function M.toolchain_args(resolved, toolchain, resolve_tool)
+function M.toolchain_args(resolved, toolchain, resolve_tool, resolve_path)
     if not toolchain or M.has_compilers(resolved) then
         return {}
     end
 
     local resolve = resolve_tool or function(value)
+        return value
+    end
+    local resolve_dir = resolve_path or function(value)
         return value
     end
 
@@ -556,6 +568,65 @@ function M.toolchain_args(resolved, toolchain, resolve_tool)
     end
     if toolchain.cxx and toolchain.cxx ~= "" then
         args[#args + 1] = "-DCMAKE_CXX_COMPILER=" .. resolve(toolchain.cxx)
+    end
+
+    if toolchain.type == "unix" and toolchain.sysroot and toolchain.sysroot ~= "" then
+        args[#args + 1] = "-DCMAKE_SYSROOT=" .. resolve_dir(toolchain.sysroot)
+    end
+
+    if toolchain.type == "msvc" then
+        for _, arg in ipairs(M.msvc_args(toolchain, resolve, resolve_dir)) do
+            args[#args + 1] = arg
+        end
+    end
+
+    return args
+end
+
+--- Arguments for an `msvc` toolchain: Windows target, LLVM tools and, when
+--- `sdk` is set, the Windows SDK/CRT search paths.
+---@param toolchain OrchToolchain
+---@param resolve fun(value: string): string
+---@param resolve_dir fun(value: string): string
+---@return string[]
+function M.msvc_args(toolchain, resolve, resolve_dir)
+    local target = (toolchain.target and toolchain.target ~= "") and toolchain.target or MSVC_TARGET
+    local args = {
+        "-DCMAKE_SYSTEM_NAME=Windows",
+        "-DCMAKE_C_COMPILER_TARGET=" .. target,
+        "-DCMAKE_CXX_COMPILER_TARGET=" .. target,
+        "-DCMAKE_LINKER=" .. resolve("lld-link"),
+        "-DCMAKE_AR=" .. resolve("llvm-lib"),
+        "-DCMAKE_RC_COMPILER=" .. resolve("llvm-rc"),
+    }
+
+    if toolchain.sdk and toolchain.sdk ~= "" then
+        local root = resolve_dir(toolchain.sdk)
+        local includes = {
+            root .. "/crt/include",
+            root .. "/sdk/include/ucrt",
+            root .. "/sdk/include/um",
+            root .. "/sdk/include/shared",
+        }
+        local libs = {
+            root .. "/crt/lib/x86_64",
+            root .. "/sdk/lib/ucrt/x86_64",
+            root .. "/sdk/lib/um/x86_64",
+        }
+        local inc, lib = {}, {}
+        for _, dir in ipairs(includes) do
+            inc[#inc + 1] = "/imsvc " .. dir
+        end
+        for _, dir in ipairs(libs) do
+            lib[#lib + 1] = "/libpath:" .. dir
+        end
+        local inc_flags = table.concat(inc, " ")
+        local lib_flags = table.concat(lib, " ")
+        args[#args + 1] = "-DCMAKE_C_FLAGS=" .. inc_flags
+        args[#args + 1] = "-DCMAKE_CXX_FLAGS=" .. inc_flags
+        args[#args + 1] = "-DCMAKE_EXE_LINKER_FLAGS=" .. lib_flags
+        args[#args + 1] = "-DCMAKE_SHARED_LINKER_FLAGS=" .. lib_flags
+        args[#args + 1] = "-DCMAKE_MODULE_LINKER_FLAGS=" .. lib_flags
     end
 
     return args

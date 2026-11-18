@@ -125,6 +125,45 @@ check("toolchain args injected", (function()
     return #args == 2 and args[1] == "-DCMAKE_C_COMPILER=clang" and args[2] == "-DCMAKE_CXX_COMPILER=clang++"
 end)())
 
+check("unix toolchain emits CMAKE_SYSROOT", (function()
+    local args = presets.toolchain_args(nil, { type = "unix", c = "arm-gcc", cxx = "arm-g++", sysroot = "/opt/sys" })
+    return args[3] == "-DCMAKE_SYSROOT=/opt/sys" and #args == 3
+end)())
+
+check("system toolchain ignores sysroot", (function()
+    local args = presets.toolchain_args(nil, { type = "system", c = "gcc", cxx = "g++", sysroot = "/opt/sys" })
+    return #args == 2
+end)())
+
+check("msvc toolchain targets Windows with LLVM tools", (function()
+    local args = presets.toolchain_args(nil, { type = "msvc", c = "clang-cl", cxx = "clang-cl" })
+    local set = {}
+    for _, a in ipairs(args) do set[a] = true end
+    return set["-DCMAKE_SYSTEM_NAME=Windows"]
+        and set["-DCMAKE_C_COMPILER_TARGET=x86_64-pc-windows-msvc"]
+        and set["-DCMAKE_CXX_COMPILER_TARGET=x86_64-pc-windows-msvc"]
+        and set["-DCMAKE_LINKER=lld-link"]
+        and set["-DCMAKE_AR=llvm-lib"]
+        and set["-DCMAKE_RC_COMPILER=llvm-rc"]
+end)())
+
+check("msvc sdk adds include and libpath flags", (function()
+    local args = presets.toolchain_args(nil, { type = "msvc", c = "clang-cl", cxx = "clang-cl", sdk = "/opt/xwin" })
+    local joined = table.concat(args, "\n")
+    return joined:find("-DCMAKE_CXX_FLAGS=/imsvc /opt/xwin/crt/include /imsvc /opt/xwin/sdk/include/ucrt", 1, true) ~= nil
+        and joined:find("-DCMAKE_EXE_LINKER_FLAGS=/libpath:/opt/xwin/crt/lib/x86_64", 1, true) ~= nil
+end)())
+
+check("msvc custom target overrides default", (function()
+    local args = presets.toolchain_args(nil, { type = "msvc", c = "clang-cl", cxx = "clang-cl", target = "aarch64-pc-windows-msvc" })
+    return table.concat(args, "\n"):find("-DCMAKE_C_COMPILER_TARGET=aarch64-pc-windows-msvc", 1, true) ~= nil
+end)())
+
+check("non-msvc toolchain has no Windows flags", (function()
+    local args = presets.toolchain_args(nil, { type = "unix", c = "gcc", cxx = "g++" })
+    return table.concat(args, "\n"):find("Windows", 1, true) == nil
+end)())
+
 check("toolchain args skipped when preset defines compiler", (function()
     local with_compiler = presets.resolve(discovered, "configure", "with-compiler")
     local args = presets.toolchain_args(with_compiler, { c = "clang", cxx = "clang++" })

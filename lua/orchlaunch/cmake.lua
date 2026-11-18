@@ -272,7 +272,7 @@ function M.configure_spec()
     if name and resolved then
         argv[#argv + 1] = "--preset"
         argv[#argv + 1] = name
-        for _, arg in ipairs(presets.toolchain_args(resolved, M.toolchain(), state.resolve_tool)) do
+        for _, arg in ipairs(presets.toolchain_args(resolved, M.toolchain(), state.resolve_tool, state.resolve_path)) do
             argv[#argv + 1] = arg
         end
     else
@@ -281,14 +281,8 @@ function M.configure_spec()
         argv[#argv + 1] = "-B"
         argv[#argv + 1] = M.binary_dir()
 
-        local toolchain = M.toolchain()
-        if toolchain then
-            if toolchain.c and toolchain.c ~= "" then
-                argv[#argv + 1] = "-DCMAKE_C_COMPILER=" .. (state.resolve_tool(toolchain.c) or toolchain.c)
-            end
-            if toolchain.cxx and toolchain.cxx ~= "" then
-                argv[#argv + 1] = "-DCMAKE_CXX_COMPILER=" .. (state.resolve_tool(toolchain.cxx) or toolchain.cxx)
-            end
+        for _, arg in ipairs(presets.toolchain_args(nil, M.toolchain(), state.resolve_tool, state.resolve_path)) do
+            argv[#argv + 1] = arg
         end
         if opts.generator and opts.generator ~= "" then
             argv[#argv + 1] = "-G"

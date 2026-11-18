@@ -32,6 +32,24 @@ the API every other module uses. No other module parses JSON directly.
 
 Tool paths may be command names (resolved from `PATH`), absolute paths, or
 paths relative to `.orch`. `gdb` and `lldb` are recognized as debuggers.
+
+`type` controls how the toolchain is used:
+
+- `system` — the host's own compilers and libraries; CMake gets only `c`/`cxx`.
+- `unix` — for cross or small standalone builds. An optional `sysroot` is
+  passed as `-DCMAKE_SYSROOT=<path>` (relative paths resolve against `.orch`),
+  so you can point CMake at a target root without writing a CMake toolchain file.
+  `sysroot` is ignored for `system` and `msvc` (validation warns about it).
+- `msvc` — a Windows target built from any host with LLVM tools: sets
+  `-DCMAKE_SYSTEM_NAME=Windows`, the clang target (`target`, default
+  `x86_64-pc-windows-msvc`), and `lld-link`/`llvm-lib`/`llvm-rc`. Optional `sdk`
+  is a Windows SDK + CRT root in `crt/` and `sdk/` layout (e.g. `xwin splat`
+  output); its include and library paths are passed as `/imsvc` and `/libpath:`.
+  Use `clang-cl` for `c`/`cxx`.
+
+`sysroot` alone only sets the search root. For a real cross build CMake usually
+also needs `CMAKE_SYSTEM_NAME` and friends, which still belong in a CMake
+toolchain file (use `cmake` presets with `toolchainFile` for that).
 `environment` is inherited by CMake configure/build/test/install and by
 run/debug; the active profile or run configuration overrides it on key
 collisions. The toolchain `debugger` is the default for native configurations;

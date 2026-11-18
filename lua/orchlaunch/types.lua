@@ -122,6 +122,9 @@
 ---@field cxx OrchPath
 ---@field debugger string `gdb`/`lldb` or an executable path.
 ---@field environment? OrchEnvironment Environment applied to configure/build/test and to launched programs.
+---@field sysroot? string Cross-build sysroot (`unix` only). Relative paths resolve against `.orch`; passed as `-DCMAKE_SYSROOT`.
+---@field target? string Clang target triple for `msvc` (default `x86_64-pc-windows-msvc`).
+---@field sdk? string Windows SDK + CRT root for `msvc` (`crt/`, `sdk/` layout, e.g. `xwin splat`).
 ---@field [string] any
 
 --- Contents of `toolchain.json`.
