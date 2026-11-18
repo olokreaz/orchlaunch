@@ -597,8 +597,12 @@ end
 
 ---@param tools? OrchBeforeTool[]
 ---@return OrchBefore
-function M.before(tools)
-    return { tools = tools or {} }
+--- Before-launch block. `log` is the default output policy for every step.
+---@param tools OrchBeforeTool[]
+---@param opts? { log?: string|table }
+function M.before(tools, opts)
+    opts = opts or {}
+    return { tools = tools or {}, log = opts.log }
 end
 
 -- ============================================================================

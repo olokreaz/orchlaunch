@@ -303,6 +303,19 @@ local function check_run_configurations(root, ctx)
         -- before-launch steps
         local before = jsonpos.get(cfg, "before")
         local steps = before and jsonpos.get(before, "tools")
+        if before and before.kind == "object" then
+            local before_log = jsonpos.get(before, "log")
+            if before_log then
+                local value = before_log.kind == "string" and before_log.value or nil
+                if before_log.kind == "object" then
+                    value = { file = jsonpos.get_string(before_log, "file") }
+                end
+                local _, log_err = require("orchlaunch.runner.output").normalize_log(value)
+                if log_err then
+                    out[#out + 1] = at_key(before, "log", SEV.ERROR, log_err)
+                end
+            end
+        end
         if steps and steps.kind == "array" then
             for _, step in ipairs(steps.items) do
                 if step.kind == "object" then

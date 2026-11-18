@@ -185,9 +185,9 @@
       "additionalProperties": true
     },
     "step-log": {
-      "description": "Where a before-step's output goes. none: silent on success, stderr tail on failure. errorsOnly: silent on success, full output on failure. console: always shown. { file }: always written to the file (macros expanded, directory created).",
+      "description": "Where a process step's output goes. showIfError (default): quiet on success, full output in the output window on failure. show: always open the output window. none: never show; on failure only the last stderr line is notified. { file }: always written to the file (macros expanded, directory created).",
       "oneOf": [
-        { "type": "string", "enum": ["none", "errorsOnly", "console"] },
+        { "type": "string", "enum": ["none", "showIfError", "show"] },
         {
           "type": "object",
           "properties": {
@@ -202,6 +202,10 @@
       "type": "object",
       "description": "Before-launch steps (run before the main configuration)",
       "properties": {
+        "log": {
+          "$ref": "#/$defs/step-log",
+          "description": "Default output policy for every step in this block. A step's own log overrides it. Default: showIfError."
+        },
         "tools": {
           "type": "array",
           "items": {

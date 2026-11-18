@@ -11,6 +11,7 @@ local process = require("orchlaunch.process")
 local state = require("orchlaunch.state")
 local tool_spec = require("orchlaunch.tool_spec").build
 local output = require("orchlaunch.runner.output")
+local window = require("orchlaunch.runner.window")
 local config = require("orchlaunch.config")
 
 local M = {}
@@ -60,32 +61,32 @@ local function exec_spec(item, scope, captured)
     }
 end
 
---- Shows a step's output as the `log` policy says.
----@param label string
----@param plan { level: string, text?: string, file_text?: string }
----@param log any
+--- Applies the output policy to one finished process step.
+---@param win table run output window (from runner/window)
+---@param label string e.g. "exec uname" or "external gen-assets"
+---@param log any effective log policy
+---@param result OrchProcessResult
+---@param ok boolean
 ---@param scope? table
-local function show_output(label, plan, log, scope)
-    if plan.file_text and type(log) == "table" then
-        local path = state.resolve_path(log.file, scope)
+local function apply_output(win, label, log, result, ok, scope)
+    local decision = output.decide(log, ok, label, result)
+    if decision.action == "file" then
+        local path = state.resolve_path(decision.path, scope)
         if path then
             vim.fn.mkdir(vim.fs.dirname(path), "p")
-            vim.fn.writefile(vim.split(plan.file_text, "\n", { plain = true }), path)
+            vim.fn.writefile(decision.lines, path)
         end
-        return
-    end
-    if plan.text and plan.text ~= "" then
-        local level = plan.level == "error" and ERROR or vim.log.levels.INFO
-        notify(("%s:\n%s"):format(label, plan.text), level)
+    elseif decision.action == "window" then
+        win.append(decision.lines, decision.open)
+    elseif decision.action == "notify" then
+        notify(decision.text, ERROR)
     end
 end
 
 --- Runs one `exec` step synchronously. Returns ok.
----@param item table
----@param scope? table
 ---@return boolean
-local function run_exec(item, scope, captured)
-    local log, log_err = output.normalize_log(item.log)
+local function run_exec(item, scope, captured, win, before_log)
+    local log, log_err = output.normalize_log(output.effective_log(before_log, item.log))
     if not log then
         notify(("exec step: %s"):format(log_err), ERROR)
         return false
@@ -93,7 +94,7 @@ local function run_exec(item, scope, captured)
     local spec = exec_spec(item, scope, captured)
     local result = process.run(spec)
     local ok = process.succeeded(result)
-    show_output("exec " .. spec.program, output.plan(log, result, ok), log, scope)
+    apply_output(win, "exec " .. spec.program, log, result, ok, scope)
     if ok and item.capture then
         captured[item.capture] = output.capture_value(result.stdout)
     end
@@ -101,11 +102,8 @@ local function run_exec(item, scope, captured)
 end
 
 --- Runs one `exec` step asynchronously.
----@param item table
----@param scope? table
----@param done fun(ok: boolean)
-local function run_exec_async(item, scope, captured, done)
-    local log, log_err = output.normalize_log(item.log)
+local function run_exec_async(item, scope, captured, win, before_log, done)
+    local log, log_err = output.normalize_log(output.effective_log(before_log, item.log))
     if not log then
         notify(("exec step: %s"):format(log_err), ERROR)
         done(false)
@@ -114,7 +112,7 @@ local function run_exec_async(item, scope, captured, done)
     local spec = exec_spec(item, scope, captured)
     start_async(spec, "exec " .. spec.program, function(result)
         local ok = process.succeeded(result)
-        show_output("exec " .. spec.program, output.plan(log, result, ok), log, scope)
+        apply_output(win, "exec " .. spec.program, log, result, ok, scope)
         if ok and item.capture then
             captured[item.capture] = output.capture_value(result.stdout)
         end
@@ -122,11 +120,32 @@ local function run_exec_async(item, scope, captured, done)
     end)
 end
 
---- Runs an external tool synchronously.
----@param tool OrchExternalTool
----@return OrchProcessResult
-local function run_tool(tool, call)
-    return process.run(tool_spec(tool, call))
+--- Per-step output policy for an `external` tool call: the same policy as
+--- `exec`, so a tool's stdout and stderr are shown or filed consistently.
+local function run_external(tool, item, scope, captured, win, before_log)
+    local log, log_err = output.normalize_log(output.effective_log(before_log, item.log))
+    if not log then
+        notify(("external step: %s"):format(log_err), ERROR)
+        return false
+    end
+    local result = process.run(tool_spec(tool, call_of(item, scope, captured)))
+    local ok = process.succeeded(result)
+    apply_output(win, "external " .. tool.name, log, result, ok, scope)
+    return ok
+end
+
+local function run_external_async(tool, item, scope, captured, win, before_log, done)
+    local log, log_err = output.normalize_log(output.effective_log(before_log, item.log))
+    if not log then
+        notify(("external step: %s"):format(log_err), ERROR)
+        done(false)
+        return
+    end
+    start_async(tool_spec(tool, call_of(item, scope, captured)), "external tool " .. tool.name, function(result)
+        local ok = process.succeeded(result)
+        apply_output(win, "external " .. tool.name, log, result, ok, scope)
+        done(ok)
+    end)
 end
 
 -- ============================================================================
@@ -134,10 +153,15 @@ end
 -- ============================================================================
 
 --- Runs the before-launch actions in order. Returns false if one failed.
+--- `before.log` is the default output policy for every step; a step's own
+--- `log` overrides it. All process output goes to one window per run.
 ---@param before? OrchBefore
+---@param scope? table
 ---@return boolean
 local function run_before(before, scope)
     local captured = {}
+    local win = window.new((scope and scope.target_name) or "run")
+    local before_log = before and before.log
     for _, item in ipairs(before and before.tools or {}) do
         local kind = type(item) == "table" and item.type or item
 
@@ -150,19 +174,15 @@ local function run_before(before, scope)
         elseif kind == "external" then
             local name = type(item) == "table" and item.tool or nil
             local tool = name and state.external_tool(name)
-
             if not tool then
                 notify(("before-launch references unknown external tool: %s"):format(tostring(name)), ERROR)
                 return false
             end
-
-            local result = run_tool(tool, call_of(item, scope, captured))
-            if not process.succeeded(result) then
-                notify(("external tool %q failed with code %d"):format(name, result.code), ERROR)
+            if not run_external(tool, item, scope, captured, win, before_log) then
                 return false
             end
         elseif kind == "exec" then
-            if not run_exec(item, scope, captured) then
+            if not run_exec(item, scope, captured, win, before_log) then
                 return false
             end
         else
@@ -173,20 +193,15 @@ local function run_before(before, scope)
     return true
 end
 
---- Asynchronous external-tool runner.
----@param tool OrchExternalTool
----@param call? table per-call values from the before-step (see `call_of`)
----@param on_done fun(result: OrchProcessResult)
-local function run_tool_async(tool, call, on_done)
-    start_async(tool_spec(tool, call), "external tool " .. tool.name, on_done)
-end
-
---- Asynchronous before-launch chain.
+--- Asynchronous before-launch chain. Same steps and policy as `run_before`.
 ---@param before? OrchBefore
+---@param scope? table
 ---@param on_done fun(ok: boolean)
 local function run_before_async(before, scope, on_done)
     local items = before and before.tools or {}
     local captured = {}
+    local win = window.new((scope and scope.target_name) or "run")
+    local before_log = before and before.log
     local index = 0
 
     local function next_item()
@@ -216,25 +231,15 @@ local function run_before_async(before, scope, on_done)
                 on_done(false)
                 return
             end
-
-            run_tool_async(tool, call_of(item, scope, captured), function(result)
-                if not process.succeeded(result) then
-                    local detail = (result.stderr or ""):gsub("%s+$", "")
-                    notify(
-                        ("external tool %q failed with code %d%s"):format(
-                            name,
-                            result.code,
-                            detail ~= "" and (": " .. detail) or ""
-                        ),
-                        ERROR
-                    )
-                    on_done(false)
-                else
+            run_external_async(tool, item, scope, captured, win, before_log, function(ok)
+                if ok then
                     next_item()
+                else
+                    on_done(false)
                 end
             end)
         elseif kind == "exec" then
-            run_exec_async(item, scope, captured, function(ok)
+            run_exec_async(item, scope, captured, win, before_log, function(ok)
                 if ok then
                     next_item()
                 else
@@ -248,6 +253,30 @@ local function run_before_async(before, scope, on_done)
     end
 
     next_item()
+end
+
+--- Runs one external tool on its own (no before-chain): synchronous.
+--- Output follows the default policy (showIfError).
+---@param tool OrchExternalTool
+---@param call? table
+---@return OrchProcessResult
+local function run_tool(tool, call)
+    local result = process.run(tool_spec(tool, call))
+    apply_output(window.new(tool.name), "external " .. tool.name, "showIfError", result,
+        process.succeeded(result), call and call.scope)
+    return result
+end
+
+--- Runs one external tool on its own: asynchronous.
+---@param tool OrchExternalTool
+---@param call? table
+---@param on_done fun(result: OrchProcessResult)
+local function run_tool_async(tool, call, on_done)
+    start_async(tool_spec(tool, call), "external tool " .. tool.name, function(result)
+        apply_output(window.new(tool.name), "external " .. tool.name, "showIfError", result,
+            process.succeeded(result), call and call.scope)
+        on_done(result)
+    end)
 end
 
 M.run_before = run_before

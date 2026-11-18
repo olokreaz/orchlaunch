@@ -69,4 +69,24 @@ h.check("bad capture name is an error", has_error(diags_for({ type = "exec", arg
 h.check("unknown log mode is an error", has_error(diags_for({ type = "exec", argv = { "x" }, log = "loud" })))
 h.check("file log object is accepted", not has_error(diags_for({ type = "exec", argv = { "x" }, log = { file = "/tmp/x" } })))
 
+-- 7. before.log is validated too.
+local function before_log_diags(log)
+    local text = vim.json.encode({ configurations = {
+        { name = "G", type = "native", target = "g", before = { log = log, tools = { { type = "exec", argv = { "x" } } } } },
+    } })
+    return validate.check("run_configurations", text, validate.context())
+end
+h.check("valid before.log is accepted", not has_error(before_log_diags("show")))
+h.check("unknown before.log policy is an error", has_error(before_log_diags("loud")))
+
+-- 8. the output window: one buffer per run, appended to by every step.
+local window = require("orchlaunch.runner.window")
+local win = window.new("demo")
+win.append({ "== a ==", "[out] one" }, false)
+win.append({ "== b ==", "[err] two" }, false)
+local buf = win.buf
+h.eq("window keeps one buffer across appends", vim.api.nvim_buf_line_count(buf), 4)
+h.eq("window appends in order", vim.api.nvim_buf_get_lines(buf, 3, 4, false)[1], "[err] two")
+h.eq("window buffer is read-only for the user", vim.bo[buf].modifiable, false)
+
 h.done("before exec steps")
