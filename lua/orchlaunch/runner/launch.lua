@@ -199,6 +199,9 @@ local function launch_remote_debug_async(name, mode, on_done)
             connection = cfg.connection,
             program = state.resolve_path(cfg.symbol),
         })
+        if not config then
+            pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "OrchLaunchDebugStopped" })
+        end
         on_done(config ~= nil)
     end)
 end
@@ -467,7 +470,11 @@ local function launch_remote_debug(name, mode)
         return
     end
     local dbg = require("orchlaunch.debug")
-    dbg.start(cfg, { type = "attach", connection = cfg.connection, program = state.resolve_path(cfg.symbol) })
+    local config = dbg.start(cfg, { type = "attach", connection = cfg.connection, program = state.resolve_path(cfg.symbol) })
+    if not config then
+        -- The session never started, so nothing will fire OrchLaunchDebugStopped.
+        pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "OrchLaunchDebugStopped" })
+    end
 end
 
 --- Runs (or debugs) a configuration by name.

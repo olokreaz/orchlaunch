@@ -11,6 +11,11 @@ local M = {}
 -- global, so clearing it would also erase breakpoints belonging to other tools.
 local managed = {}
 
+-- Persisted records whose file was missing when the project was loaded. They
+-- cannot be live yet, so `persist` must carry them over instead of dropping
+-- them from `.orch/breakpoints.json`.
+local unapplied = {}
+
 ---@param bp table
 ---@param bufnr integer
 ---@param line integer
@@ -383,8 +388,16 @@ function M.persist()
     end
 
     local records = {}
+    local seen = {}
     for _, bp in ipairs(M.list()) do
-        records[#records + 1] = to_record(bp)
+        local record = to_record(bp)
+        records[#records + 1] = record
+        seen[record.file .. ":" .. record.line] = true
+    end
+    for _, record in ipairs(unapplied) do
+        if not seen[record.file .. ":" .. record.line] then
+            records[#records + 1] = record
+        end
     end
 
     local state = get_state()
@@ -411,12 +424,22 @@ function M.load()
     -- The same buffer number can survive a project switch, so remove the old
     -- project's live breakpoints before applying this project's records.
     M.clear_live()
+    unapplied = {}
 
     local applied = 0
     for _, record in ipairs(state.breakpoints or {}) do
         if type(record.file) == "string" and type(record.line) == "number" then
             local path = M.to_absolute(record.file)
-            if vim.fn.filereadable(path) == 1 then
+            if vim.fn.filereadable(path) ~= 1 then
+                unapplied[#unapplied + 1] = record
+                vim.notify(
+                    ("[orchlaunch] breakpoint %s:%d skipped: file not found (kept in breakpoints.json)"):format(
+                        record.file,
+                        record.line
+                    ),
+                    vim.log.levels.WARN
+                )
+            else
                 local bufnr = buffer_for(path)
                 local previous
                 if not (managed[bufnr] and managed[bufnr][record.line]) then

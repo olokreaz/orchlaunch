@@ -97,7 +97,10 @@ function M.start(cfg, opts)
         if request.dap_path and request.dap_path ~= "" then
             return vim.fn.executable(request.dap_path) == 1 or vim.fn.exepath(request.dap_path) ~= ""
         end
-        return backend.available and backend.available() or true
+        if backend.available then
+            return backend.available()
+        end
+        return true
     end
 
     if not available() then

@@ -66,8 +66,8 @@ h.check("lldb attach pid has no remote port", lldb_pid["gdb-remote-port"] == nil
 
 local gdb_attach = gdb.attach({ name = "Attach", connection = "localhost:9000", program = "app" })
 h.eq("gdb attach request", gdb_attach.request, "attach")
-h.eq("gdb attach host", gdb_attach.host, "localhost")
-h.eq("gdb attach port", gdb_attach.port, 9000)
+h.eq("gdb attach target", gdb_attach.target, "localhost:9000")
+h.check("gdb attach has no generic host/port", gdb_attach.host == nil and gdb_attach.port == nil)
 h.eq("gdb attach program", gdb_attach.program, "app")
 
 h.done("debug backend registry")

@@ -264,24 +264,50 @@ function M.attach_listeners()
         end
         M.emit()
     end)
-    d.listeners.after.event_continued = d.listeners.after.event_continued or {}
-    table.insert(d.listeners.after.event_continued, function()
+    local function resumed()
         state.status = "running"
+        state.current_frame = nil
+        state.frames_by_thread = {}
+        state.scopes_by_frame = {}
         state.vars_by_ref = {}
         pending_vars = {}
         M.emit()
-    end)
+    end
+    d.listeners.after.event_continued = d.listeners.after.event_continued or {}
+    table.insert(d.listeners.after.event_continued, resumed)
+    -- gdb answers `continue` without sending `continued`. Treat a successful
+    -- resume request as resuming too, otherwise the panel keeps showing the
+    -- previous stop while the program runs.
+    for _, command in ipairs({ "continue", "next", "stepIn", "stepOut" }) do
+        d.listeners.after[command] = d.listeners.after[command] or {}
+        table.insert(d.listeners.after[command], function(_, err)
+            if not err then
+                resumed()
+            end
+        end)
+    end
     d.listeners.after.event_exited = d.listeners.after.event_exited or {}
     table.insert(d.listeners.after.event_exited, function()
         state.status = "exited"
         M.emit()
     end)
-    d.listeners.after.event_terminated = d.listeners.after.event_terminated or {}
-    table.insert(d.listeners.after.event_terminated, function()
+    -- The session ended on its own (debuggee finished, adapter terminated or
+    -- the client disconnected). Announce it so anything tied to the session,
+    -- such as a plugin-managed debug server, is stopped too.
+    local function session_ended()
         state.status = "exited"
         state.active = false
         M.emit()
-    end)
+        -- Deferred: stopping a server waits on its process, which must not run
+        -- inside nvim-dap's listener.
+        vim.schedule(function()
+            pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "OrchLaunchDebugStopped" })
+        end)
+    end
+    d.listeners.after.event_terminated = d.listeners.after.event_terminated or {}
+    table.insert(d.listeners.after.event_terminated, session_ended)
+    d.listeners.after.disconnect = d.listeners.after.disconnect or {}
+    table.insert(d.listeners.after.disconnect, session_ended)
 
     -- Threads, frames and scopes are *responses* to the `threads`, `stackTrace`
     -- and `scopes` requests that nvim-dap issues while handling `stopped`; they
